@@ -1,3 +1,12 @@
+/*
+* Mieux : https://github.com/cbergoon/merkletree/blob/master/merkle_tree.go
+* tout est super bien coder dessus, il n'y a plus qu'à comprendre 
+*/
+
+
+
+
+
 package main
 
 import "fmt"
@@ -21,9 +30,7 @@ func (markleTree *MarkleTree) addNode(existingNode *MarkleNode, newNode *MarkleN
 
 	if existingNode.left == nil {
 		existingNode.left = newNode
-	}
-
-	if existingNode.right == nil {
+	} else if existingNode.right == nil {
 		existingNode.left = newNode
 	}
 	return true

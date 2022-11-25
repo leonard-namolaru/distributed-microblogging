@@ -2,6 +2,14 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"net/http"
+	"encoding/json"
+	"net/url"
+	"time"
+	"crypto/tls"
+	"io"
+	"net"
 )
 
 type save struct {
@@ -9,22 +17,47 @@ type save struct {
 	Key string		`json:"key"`
 }
 
-type adresseClient struct {
-	ip string		`json:"ip"`
-	port string		`json:"port"`
-}
-
 type clientId struct {
 	Username string 			`json:"username"`
-	Adresses adresseClient		`json:"addresses"`
-	key string					`json:"key"`
+	Adresses []adress			`json:"addresses"`
+	Key string					`json:"key"`
+}
+
+type adress struct {
+	Ip string 		`json:"ip"`
+	Port uint64 	`json:"port"`
 }
 
 
-urlAddress := url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/udp-address"}
-urlRegister := url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/register"}
+func main(){
 
-func CreateHttpClient() *http.client {
+	urlAddress := url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/udp-address"}
+	//urlRegister := url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/register"}
+	//urlPublicKey := url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/server-key"}
+
+	me := CreateHttpClient()
+	body := getHttpResponse(me, urlAddress.String())
+
+	var adressesServer []adress
+	err := json.Unmarshal(body, &adressesServer)
+	if err != nil {
+		log.Fatalf("json.Unmarshal() : %v\n", err)
+	}
+
+	connection, err := net.Dial("udp", fmt.Sprintf("%v:%v", adressesServer[0].Ip, adressesServer[0].Port))
+	if err != nil {
+		log.Fatalf("net.Dial() : %v\n", err)
+	}
+
+	connection.Close()
+}
+
+
+/*func SaveToServer() bool {
+
+}*/
+
+func CreateHttpClient() *http.Client {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.MaxIdleConns = 100
 	t.MaxConnsPerHost = 100
@@ -39,21 +72,27 @@ func CreateHttpClient() *http.client {
 	return client
 }
 
-func createClientId(...) *clientStruct {
-	var c clientId
-	return c
+func createClientId(username string, ipv4 string, ipv6 string, port uint64, publicKey string) *clientId {
+	adress1Client := &adress{
+		Ip: ipv4,
+		Port: port,
+	}
+	adress2Client := &adress{
+		Ip: ipv6,
+		Port: port,
+	}
+	adressesClient := []adress{
+		*adress1Client,
+		*adress2Client,
+	}
+	client := &clientId{
+		Username: username,
+		Adresses: adressesClient,
+		Key: publicKey,
+	}
+	return client
 } 
 
-func Save(client clientId) bool {
-	jsonBody, newEtag := postHttpResponse(client, urlRegister.String())
-	var response save
-	err := json.Unmarshal(jsonBody, &response)
-	if err != nil {
-		log.Fatalf("json.Unmarshal() : %v\n", err)
-	}
-	client.Username = response.Name
-	client.key = response.key // warning private key or public key
-}
 
 func getHttpResponse(client *http.Client, url string) []byte {
 
