@@ -19,11 +19,11 @@ type save struct {
 
 type clientId struct {
 	Username string 			`json:"username"`
-	Adresses []adress			`json:"addresses"`
+	Adresses []address			`json:"addresses"`
 	Key string					`json:"key"`
 }
 
-type adress struct {
+type address struct {
 	Ip string 		`json:"ip"`
 	Port uint64 	`json:"port"`
 }
@@ -38,7 +38,7 @@ func main(){
 	me := CreateHttpClient()
 	body := getHttpResponse(me, urlAddress.String())
 
-	var adressesServer []adress
+	var adressesServer []address
 	err := json.Unmarshal(body, &adressesServer)
 	if err != nil {
 		log.Fatalf("json.Unmarshal() : %v\n", err)
@@ -73,15 +73,15 @@ func CreateHttpClient() *http.Client {
 }
 
 func createClientId(username string, ipv4 string, ipv6 string, port uint64, publicKey string) *clientId {
-	adress1Client := &adress{
+	adress1Client := &address{
 		Ip: ipv4,
 		Port: port,
 	}
-	adress2Client := &adress{
+	adress2Client := &address{
 		Ip: ipv6,
 		Port: port,
 	}
-	adressesClient := []adress{
+	adressesClient := []address{
 		*adress1Client,
 		*adress2Client,
 	}
