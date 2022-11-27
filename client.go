@@ -10,9 +10,10 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
-	"math/big"
-	"crypto/rand"
+	//"math/big"
+	//"crypto/rand"
 	//"string"
+	"bytes"
 )
 
 type id struct {
@@ -31,29 +32,57 @@ type address struct {
 	Port uint64 	`json:"port"`
 }
 
-var p, g, p1, zero, one, a, A, B, s big.Int // a is private key !
+//var p, g, p1, zero, one, a, A, B, s big.Int // a is private key !
 
 var urlAddress, urlRegister, urlPublicKey, urlList url.URL
 
 var myName string
 var myId *id
 
-const NB_BITS = 768 // I don't know if it's the same NB_BITS from the server so I assume NB_BITS = 768 as in the tp
-const NB_BYTES = NB_BITS / 8
+//const NB_BITS = 768 // I don't know if it's the same NB_BITS from the server so I assume NB_BITS = 768 as in the tp
+//const NB_BYTES = NB_BITS / 8
 
 func main(){
 
 	initMyName("Hugo and Lenny")
-	initVar() // B and s are not initialized
+	initVar()
 
 	me := CreateHttpClient()
-	body := getHttpResponse(me, urlAddress.String())
 
+
+	//Step 1 : to get udp address
+	body := getHttpResponse(me, urlAddress.String())
 	var adressesServer []address
 	err := json.Unmarshal(body, &adressesServer)
 	if err != nil {
 		log.Fatalf("json.Unmarshal() : %v\n", err)
 	}
+	fmt.Printf("%v:%v et %v:%v\n", adressesServer[0].Ip, adressesServer[0].Port, adressesServer[1].Ip, adressesServer[1].Port)
+
+	//Step 2 : to register
+	jsonIdentity, err := json.Marshal(myId)
+	if err != nil {
+		fmt.Println("error, json.Marshal(myId) : %d\n", err)
+	}
+	fmt.Printf("%v\n", string(jsonIdentity) )
+
+	req, err := http.NewRequest("POST", urlRegister.String(), bytes.NewBuffer([]byte(jsonIdentity)))
+    resp2, err := me.Do(req)
+    if err != nil {
+        panic(err)
+    }
+    body2, err := io.ReadAll(resp2.Body)
+	if err != nil {
+		log.Fatalf("io.ReadAll() function : %v", err)
+	}
+    defer resp2.Body.Close()
+	fmt.Printf("response : %v\n", body2)
+
+
+
+
+
+
 
 	connection, err := net.Dial("udp", fmt.Sprintf("%v:%v", adressesServer[0].Ip, adressesServer[0].Port))
 	if err != nil {
@@ -138,6 +167,24 @@ func postHttpResponse(client *http.Client, url string) []byte {
 	return body
 }
 
+func postFormHttpResponse(client *http.Client, url string, data url.Values) []byte {
+
+	resp, err := client.PostForm(url, data)
+	if err != nil {
+		log.Fatalf("client.Do() function : %v\n", err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("io.ReadAll() function : %v", err)
+	}
+
+	defer resp.Body.Close()
+
+	return body
+}
+
+
 func initVar(){
 
 	urlAddress = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/udp-address"}
@@ -145,7 +192,7 @@ func initVar(){
 	urlPublicKey = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/server-key"}
 	urlList = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/peers"}
 
-	p.SetString("FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A36210000000000090563", 16)
+	/*p.SetString("FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A36210000000000090563", 16)
 	g.SetInt64(2)
 	zero.SetInt64(0)
 	one.SetInt64(1)
@@ -158,11 +205,11 @@ func initVar(){
 	}
 
 	a.SetBytes(buffer_of_bits)
-	A.Exp(&g, &a, &p)
+	A.Exp(&g, &a, &p)*/
 
 	myId = &id{
 		Name: myName,
-		Key: A.String(),
+		Key: "",
 	}
 }
 
