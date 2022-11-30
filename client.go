@@ -15,7 +15,7 @@ import (
 	//"string"
 	"bytes"
 	"math/rand"
-	"bufio"
+	//"bufio"
 	"encoding/binary"
 	//"strconv"
 )
@@ -35,6 +35,15 @@ type address struct {
 	Ip string 		`json:"ip"`
 	Port uint64 	`json:"port"`
 }
+
+/*type IP []byte
+
+type UDPAddr struct {
+	IP   IP
+	Port int
+	Zone string // IPv6 scoped addressing zone
+}*/
+
 
 //var p, g, p1, zero, one, a, A, B, s big.Int // a is private key !
 
@@ -97,17 +106,27 @@ func main(){
 	//the server don't sign their messages recently
 
 	// Step 4: Hello and HelloReply with the same id
-	connection, err := net.Dial("udp", fmt.Sprintf("%v:%v", adressesServer[0].Ip, adressesServer[0].Port))
-	if err != nil {
-		log.Fatalf("net.Dial() : %v\n", err)
-	}
 
 	myByteId := CreateRandId()
 	myHello := CreateHello(myByteId)
-
-	_, err = connection.Write(myHello)
+	
+	// Unlike Dial, ListenPacket creates a connection without any
+	// association with peers.
+	connection, err := net.ListenPacket("udp", ":0")
 	if err != nil {
-		log.Fatal("Function connection.Write() : ", err)
+		log.Fatal(err)
+	}
+	defer connection.Close()
+
+	dst, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v",adressesServer[0].Ip, adressesServer[0].Port))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// The connection can write data to the desired address.
+	_, err = connection.WriteTo(myHello, dst)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -117,9 +136,13 @@ func main(){
 
 	buffer := make([]byte, 1500)
 
-	_, err = bufio.NewReader(connection).Read(buffer)
+	n, addr, err := connection.ReadFrom(buffer[0:])
 	if err != nil {
 		log.Fatal("Timeout !")
+	}
+
+	if debug {
+		fmt.Printf("addr = %v, buf = %s\n",addr, buffer[:n])
 	}
 
 	/*check := true
@@ -276,7 +299,7 @@ func CreateMessage(sendedMessage string,receivedHasedMessage string) []byte { //
 
 func CreateHello(id []byte) []byte { // signature not implemanted
 	datagramLength := 12+len(myId.Name)+1 // if signature are implemanted that's more
-	datagramBodyLength := datagramLength-7
+	datagramBodyLength := 5+len(myId.Name)
 	datagram := make([]byte, datagramLength)
 	copy(datagram[0:4],id)
 	datagram[5] = 0
