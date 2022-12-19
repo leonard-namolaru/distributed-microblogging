@@ -51,7 +51,7 @@ type UDPAddr struct {
 var urlAddress, urlRegister, urlPublicKey, urlList url.URL
 
 var myName string
-var myId *id
+var myId id
 
 //const NB_BITS = 768 // I don't know if it's the same NB_BITS from the server so I assume NB_BITS = 768 as in the tp
 //const NB_BYTES = NB_BITS / 8
@@ -82,7 +82,9 @@ func main(){
 	}
 
 	if debug{
-		fmt.Printf("received address : %v:%v and %v:%v\n", adressesServer[0].Ip, adressesServer[0].Port, adressesServer[1].Ip, adressesServer[1].Port)
+		fmt.Println("BEGIN DEBUG STEP 1")
+		fmt.Printf("\treceived address : %v:%v and %v:%v\n", adressesServer[0].Ip, adressesServer[0].Port, adressesServer[1].Ip, adressesServer[1].Port)
+		fmt.Println("END DEBUG STEP 1\n")
 	}
 	
 
@@ -92,21 +94,23 @@ func main(){
 		fmt.Println("error, json.Marshal(myId) : %d\n", err)
 	}
 
-	if debug{
-		fmt.Printf("Convertion id : %v\n", string(jsonIdentity) )
-	}
 
-	body = postHttpResponse(me, urlRegister.String(), ([]byte)(jsonIdentity))
+	body = postHttpResponse(me, urlRegister.String(), jsonIdentity)
 
 	if debug{
-		fmt.Printf("identity response : %v\n", body)
+		fmt.Println("BEGIN DEBUG STEP 2")
+		fmt.Printf("\tConvertion id : %v\n", string(jsonIdentity) )
+		fmt.Printf("\tidentity response : %v\n", body)
+		fmt.Println("END DEBUG STEP 2\n")
 	}
 
 	//Step 3 : to get public key of server
 	body = getHttpResponse(me, urlPublicKey.String())
 
 	if debug{
-		fmt.Printf("public key response : %v", string(body) )
+		fmt.Println("BEGIN DEBUG STEP 3")
+		fmt.Printf("\tpublic key response : %v", string(body) )
+		fmt.Println("END DEBUG STEP 3\n")
 	}
 	//the server don't sign their messages recently
 
@@ -115,7 +119,9 @@ func main(){
 	body = getHttpResponse(me, urlList.String())
 
 	if debug{
-		fmt.Printf("body : %v\n", body)
+		fmt.Println("BEGIN DEBUG STEP 4")
+		fmt.Printf("\tbody : %v\n", body)
+		fmt.Println("END DEBUG STEP 4\n")
 	}
 
 	bodySplit := strings.Split(string(body), "\n")
@@ -145,7 +151,7 @@ func main(){
 	// Step 5 : Hello and HelloReply with the same id
 
 	myByteId := CreateRandId()
-	myHello := CreateHello(myByteId)
+	myHello := CreateHello("Hugo and Lenny")
 	
 	// Unlike Dial, ListenPacket creates a connection without any
 	// association with peers.
@@ -271,8 +277,8 @@ func getHttpResponse(client *http.Client, url string) []byte {
 
 func postHttpResponse(client *http.Client, url string, data []byte) []byte {
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-    resp, err := client.Do(req)
+	//req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
+    resp, err := client.Post(url, "application/json", bytes.NewBuffer(data))
     if err != nil {
         panic(err)
     }
@@ -325,7 +331,7 @@ func initVar(){
 	a.SetBytes(buffer_of_bits)
 	A.Exp(&g, &a, &p)*/
 
-	myId = &id{
+	myId = id{
 		Name: myName,
 		Key: "",
 	}
@@ -352,7 +358,7 @@ func CreateMessage(sendedMessage string,receivedHasedMessage string) []byte { //
 	return datagram
 }*/
 
-func CreateHello(id []byte) []byte { // signature not implemanted
+func CreateHello(id string) []byte { // signature not implemanted
 
 	idLength := 4
 	typeLength := 1
@@ -360,15 +366,12 @@ func CreateHello(id []byte) []byte { // signature not implemanted
 	flagsLength := 4
 	usernameLengthLength := 1
 	usernameLength := len(id)
-	fmt.Printf("taille de username : %d\n", usernameLength)
 	signatureLength := 0
 
 	datagramBodyLength := flagsLength + usernameLengthLength + usernameLength + signatureLength
 	datagramLength := idLength + typeLength + lengthLength + datagramBodyLength
 
 	datagram := make([]byte, datagramLength)
-	fmt.Printf("taille datagram: %d\n", len(datagram))
-	fmt.Printf("taille datagramBodyLength: %d\n", datagramLength)
 
 	copy(datagram[0:3],id)
 	datagram[4] = 0
@@ -380,17 +383,24 @@ func CreateHello(id []byte) []byte { // signature not implemanted
 	datagram[10] = 0
 	datagram[11] = byte(usernameLength)
 	copy(datagram[12:], id)
-	fmt.Printf("taille body: %d\n", datagramBodyLength)
-	fmt.Printf("taille body reel: %d\n", len(datagram[idLength + typeLength + lengthLength:]) )
 	//copy(datagram[14+usernameLength:], myId.Name)
 
-	 length := int(datagram[5])<<8 | int(datagram[6])
+	length := int(datagram[5])<<8 | int(datagram[6])
 
     body := datagram[7 : 7+length]
 
-    if len(body) < 5 {
-    	fmt.Printf("len(body) = %d\n",len(body))
-	}
+    if debug {
+    	fmt.Println("DEBUT DEBUG HELLO")
+    	fmt.Printf("\ttaille de username : %d\n", usernameLength)
+    	fmt.Printf("\ttaille datagram: %d\n", len(datagram))
+		fmt.Printf("\ttaille datagramBodyLength: %d\n", datagramLength)
+		fmt.Printf("\ttaille body: %d\n", datagramBodyLength)
+		fmt.Printf("\ttaille body reel: %d\n", len(datagram[idLength + typeLength + lengthLength:]) )
+	    if len(body) < 5 {
+	    	fmt.Printf("len(body) = %d\n",len(body))
+		}
+		fmt.Println("FIN DEBUG HELLO\n")
+    }
 	
 	return datagram
 }
