@@ -18,6 +18,7 @@ import (
 	//"bufio"
 	"encoding/binary"
 	//"strconv"
+	"strings"
 )
 
 type id struct {
@@ -61,10 +62,14 @@ func main(){
 
 	debug = true
 
-	rand.Seed(int64(time.Now().Nanosecond())) // initialization rand with nanosecond
+	// initialization rand with nanosecond for generate id
+	rand.Seed(int64(time.Now().Nanosecond()))
+
+	// initialization every variable
 	initMyName("Hugo and Lenny")
 	initVar()
 
+	// create client http
 	me := CreateHttpClient()
 
 
@@ -105,7 +110,39 @@ func main(){
 	}
 	//the server don't sign their messages recently
 
-	// Step 4: Hello and HelloReply with the same id
+	//Step 4 : to get adress pair
+
+	body = getHttpResponse(me, urlList.String())
+
+	if debug{
+		fmt.Printf("body : %v\n", body)
+	}
+
+	bodySplit := strings.Split(string(body), "\n")
+	for i, p := range bodySplit {
+		if debug {
+			fmt.Println(i,p)
+		}
+
+		urlPeer := urlList.String() + "/" + p
+		bodyforPeer := getHttpResponse(me, urlPeer)
+		fmt.Printf("ce body : %s\n",bodyforPeer)
+		/*var peer peerId
+		err := json.Unmarshal(bodyforPeer, &peer)
+		if err != nil {
+			log.Fatalf("json.Unmarshal() : %v\n", err)
+		}
+
+		if debug{
+			fmt.Printf("peer{\n")
+			fmt.Printf("username : %v\n",peer.Username)
+			fmt.Printf("}\n")
+		}*/
+
+	}
+
+
+	// Step 5 : Hello and HelloReply with the same id
 
 	myByteId := CreateRandId()
 	myHello := CreateHello(myByteId)
@@ -136,6 +173,7 @@ func main(){
 
 	buffer := make([]byte, 1500)
 
+	// server must send helloReply
 	n, addr, err := connection.ReadFrom(buffer[0:])
 	if err != nil {
 		log.Fatal("Timeout !")
@@ -144,6 +182,23 @@ func main(){
 	if debug {
 		fmt.Printf("addr = %v, buf = %s\n",addr, buffer[:n])
 	}
+
+	// server must send helloReply
+
+	err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err != nil {
+		log.Fatal("Function connection.SetReadDeadline() : ", err)
+	}
+
+	n, addr, err = connection.ReadFrom(buffer[0:])
+	if err != nil {
+		log.Fatal("Timeout !")
+	}
+
+	if debug {
+		fmt.Printf("addr = %v, buf = %s\n",addr, buffer[:n])
+	}
+
 
 	/*check := true
 	if len(buffer) >= 4 {
@@ -298,19 +353,44 @@ func CreateMessage(sendedMessage string,receivedHasedMessage string) []byte { //
 }*/
 
 func CreateHello(id []byte) []byte { // signature not implemanted
-	datagramLength := 12+len(myId.Name)+1 // if signature are implemanted that's more
-	datagramBodyLength := 5+len(myId.Name)
+
+	idLength := 4
+	typeLength := 1
+	lengthLength := 2
+	flagsLength := 4
+	usernameLengthLength := 1
+	usernameLength := len(id)
+	fmt.Printf("taille de username : %d\n", usernameLength)
+	signatureLength := 0
+
+	datagramBodyLength := flagsLength + usernameLengthLength + usernameLength + signatureLength
+	datagramLength := idLength + typeLength + lengthLength + datagramBodyLength
+
 	datagram := make([]byte, datagramLength)
-	copy(datagram[0:4],id)
-	datagram[5] = 0
-	datagram[6] = byte(datagramBodyLength >> 8)
-	datagram[7] = byte(datagramBodyLength & 0xFF)
-	datagram[8] = 0 //recently we don't have implemant extention
+	fmt.Printf("taille datagram: %d\n", len(datagram))
+	fmt.Printf("taille datagramBodyLength: %d\n", datagramLength)
+
+	copy(datagram[0:3],id)
+	datagram[4] = 0
+	datagram[5] = byte(datagramBodyLength >> 8)
+	datagram[6] = byte(datagramBodyLength & 0xFF)
+	datagram[7] = 0 //recently we don't have implemant extention
+	datagram[8] = 0
 	datagram[9] = 0
 	datagram[10] = 0
-	datagram[11] = 0
-	datagram[12] = byte(len(myId.Name))
-	copy(datagram[13:13+len(myId.Name)],([]byte)(myId.Name))
+	datagram[11] = byte(usernameLength)
+	copy(datagram[12:], id)
+	fmt.Printf("taille body: %d\n", datagramBodyLength)
+	fmt.Printf("taille body reel: %d\n", len(datagram[idLength + typeLength + lengthLength:]) )
+	//copy(datagram[14+usernameLength:], myId.Name)
+
+	 length := int(datagram[5])<<8 | int(datagram[6])
+
+    body := datagram[7 : 7+length]
+
+    if len(body) < 5 {
+    	fmt.Printf("len(body) = %d\n",len(body))
+	}
 	
 	return datagram
 }
