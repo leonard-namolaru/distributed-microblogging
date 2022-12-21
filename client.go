@@ -22,6 +22,7 @@ import (
 	//"os"
 	//"strconv"
 	"bufio"
+	vector "container/vector"
 )
 
 type id struct {
@@ -30,7 +31,7 @@ type id struct {
 }
 
 type peerId struct {
-	Username string 			`json:"username"`
+	Username string 			`json:"name"`
 	Adresses []address			`json:"addresses"`
 	Key string					`json:"key"`
 }
@@ -55,6 +56,7 @@ var urlAddress, urlRegister, urlPublicKey, urlList url.URL
 
 var myName string
 var myId id
+var mypeers vector 
 
 //const NB_BITS = 768 // I don't know if it's the same NB_BITS from the server so I assume NB_BITS = 768 as in the tp
 //const NB_BYTES = NB_BITS / 8
@@ -117,7 +119,11 @@ func main(){
 	}
 	//the server don't sign their messages recently
 
-	// Step 4 : Hello and HelloReply with the same id 	NON OK
+	// Step 4 : Hello and HelloReply with the same id 	OK BUT WITHOUT net.Listen now
+
+	if debug {
+		fmt.Println("BEGIN DEBUG STEP 4")
+	}
 
 	//myByteId := CreateRandId()
 	myHello := CreateHello(myId.Name)
@@ -131,7 +137,10 @@ func main(){
     if err != nil {
         panic(err)
     }
-    fmt.Printf("Listen at %v\n", serverAddr.String())
+
+    if debug {
+    	fmt.Printf("\tListen at %v\n", serverAddr.String())
+    }
 
     _, err = connServer.Write(myHello)
     if err != nil {
@@ -144,13 +153,16 @@ func main(){
 	if err != nil {
 		panic("read")
 	}
-	decryptResponse(response)
+
+	if debug {
+		decryptResponse(response)
+	}
 
 	helloReply := CreateHelloReply(response)
 
 	 _, err = connServer.Write(helloReply)
     if err != nil {
-        fmt.Printf("Response err %v", err)
+        fmt.Printf("\tResponse err %v", err)
     }
 
     readerConnection = bufio.NewReader(connServer)
@@ -158,7 +170,12 @@ func main(){
 	if err != nil {
 		panic("read")
 	}
-	decryptResponse(response)
+	
+
+	if debug {
+		decryptResponse(response)
+		fmt.Println("END DEBUG STEP 4\n")
+	}
 
 
     /*
@@ -269,20 +286,29 @@ func main(){
 	body = getHttpResponse(me, urlList.String())
 
 	if debug{
-		fmt.Println("BEGIN DEBUG STEP 4")
-		fmt.Printf("\tbody : %v\n", body)
-		fmt.Println("END DEBUG STEP 4\n")
+		fmt.Println("BEGIN DEBUG STEP 5")
 	}
 
 	bodySplit := strings.Split(string(body), "\n")
 	for i, p := range bodySplit {
 		if debug {
-			fmt.Println(i,p)
+			fmt.Printf("\t%d,%s\n",i,p)
 		}
 
 		urlPeer := urlList.String() + "/" + p
-		bodyforPeer := getHttpResponse(me, urlPeer)
-		fmt.Printf("ce body : %s\n",bodyforPeer)
+		bodyfromPeer := getHttpResponse(me, urlPeer)
+		fmt.Printf("\tbody from peer : %s\n",bodyfromPeer)
+		var mypeer peerId
+		err := json.Unmarshal(bodyfromPeer, &mypeer)
+		if err != nil {
+			//log.Fatalf("json.Unmarshal() : %v\n", err)
+		}
+
+		mypeers.Push(mypeer)
+
+		if debug {
+			fmt.Printf("\tmy peer : %s\n", mypeer)
+		}
 		/*var peer peerId
 		err := json.Unmarshal(bodyforPeer, &peer)
 		if err != nil {
@@ -297,6 +323,9 @@ func main(){
 
 	}
 
+	if debug {
+		fmt.Println("END DEBUG STEP 5\n")
+	}
 
 	
 }
@@ -392,6 +421,8 @@ func initVar(){
 	urlPublicKey = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/server-key"}
 	urlList = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/peers"}
 
+	mypeers = vector.New(0)
+
 	/*p.SetString("FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A36210000000000090563", 16)
 	g.SetInt64(2)
 	zero.SetInt64(0)
@@ -466,16 +497,16 @@ func CreateHello(id string) []byte { // signature not implemanted
     body := datagram[7 : 7+length]
 
     if debug {
-    	fmt.Println("DEBUT DEBUG HELLO")
-    	fmt.Printf("\ttaille de username : %d\n", usernameLength)
-    	fmt.Printf("\ttaille datagram: %d\n", len(datagram))
-		fmt.Printf("\ttaille datagramBodyLength: %d\n", datagramLength)
-		fmt.Printf("\ttaille body: %d\n", datagramBodyLength)
-		fmt.Printf("\ttaille body reel: %d\n", len(datagram[idLength + typeLength + lengthLength:]) )
+    	fmt.Println("\tDEBUT DEBUG HELLO")
+    	fmt.Printf("\t\ttaille de username : %d\n", usernameLength)
+    	fmt.Printf("\t\ttaille datagram: %d\n", len(datagram))
+		fmt.Printf("\t\ttaille datagramBodyLength: %d\n", datagramLength)
+		fmt.Printf("\t\ttaille body: %d\n", datagramBodyLength)
+		fmt.Printf("\t\ttaille body reel: %d\n", len(datagram[idLength + typeLength + lengthLength:]) )
 	    if len(body) < 5 {
 	    	fmt.Printf("len(body) = %d\n",len(body))
 		}
-		fmt.Println("FIN DEBUG HELLO\n")
+		fmt.Println("\tFIN DEBUG HELLO\n")
     }
 	
 	return datagram
@@ -493,9 +524,9 @@ func decryptResponse(response []byte) {
 	id := response[0:3]
 	typeResponse := response[4]
 	lengthBody := response[5] << 8 + response[6]
-	fmt.Printf("Id : %v\n", id)
-	fmt.Printf("type : %v\n", typeResponse)
-	fmt.Printf("taille body : %v\n", lengthBody)
+	fmt.Printf("\tId : %s\n", id)
+	fmt.Printf("\ttype : %s\n", typeResponse)
+	fmt.Printf("\ttaille body : %s\n", lengthBody)
 }
 
 func CreateRandId() []byte {
