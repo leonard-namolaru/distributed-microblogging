@@ -4,13 +4,21 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"time"
 )
+
+type Message struct {
+	Date      time.Duration // Encoded as a number of seconds since January 1, 2022
+	InReplyTo []byte        // The hash of the message to which this message replies, or 0
+	Body      string        // The message itself, encoded in UTF-8
+}
 
 type MerkleNode struct {
 	ParentNode *MerkleNode   // Pointer to the parent node
 	Children   []*MerkleNode // A table of pointers to the child nodes
 	IsLeaf     bool          // Boolean value. Is it a leaf or an internal/root node?
 	Hash       []byte        // The label of each node is a hash. In the case of a leaf, it is a hash of a UDP datagram
+	message    Message       // Only if the node is a leaf
 }
 
 type MerkleTree struct {
@@ -119,6 +127,14 @@ func (merkleTree *MerkleTree) PrintNodeHash(counter int, merkleNode *MerkleNode)
 	fmt.Printf("Hash : %x \n", merkleNode.Hash)
 }
 
+func (merkleTree *MerkleTree) PrintNodeHashInBytes(counter int, merkleNode *MerkleNode) {
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+
+	fmt.Printf("Hash : %v \n", merkleNode.Hash)
+}
+
 func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *MerkleNode) {
 	for i := 0; i < counter; i++ {
 		fmt.Printf("\t")
@@ -151,5 +167,6 @@ func main() { // For testing purposes only
 
 	merkleTree = CreateTree(udpDatagrams, 4)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHashInBytes)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 }
