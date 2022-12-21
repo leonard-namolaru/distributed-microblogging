@@ -89,6 +89,44 @@ func (merkleTree *MerkleTree) createNodes(leafNodes []*MerkleNode) *MerkleNode {
 	return merkleTree.createNodes(merkleNodes)
 }
 
+/* Depth First Search (Prefix search)
+ */
+func (merkleTree *MerkleTree) DepthFirstSearch(count int, function func(int, *MerkleNode), arg ...*MerkleNode) {
+	var merkleNode *MerkleNode // Node from which the search will start
+
+	if len(arg) == 0 {
+		merkleNode = merkleTree.Root // The default value
+	} else {
+		merkleNode = arg[0]
+	}
+
+	function(count, merkleNode)
+
+	if merkleNode.IsLeaf {
+		return
+	}
+
+	for i := 0; i < len(merkleNode.Children); i++ {
+		merkleTree.DepthFirstSearch(count+1, function, merkleNode.Children[i])
+	}
+}
+
+func (merkleTree *MerkleTree) PrintNodeHash(counter int, merkleNode *MerkleNode) {
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+
+	fmt.Printf("Hash : %x \n", merkleNode.Hash)
+}
+
+func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *MerkleNode) {
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+
+	fmt.Printf("Number of children : %d \n", len(merkleNode.Children))
+}
+
 func main() { // For testing purposes only
 	var merkleTree *MerkleTree
 
@@ -100,37 +138,18 @@ func main() { // For testing purposes only
 	udpDatagrams := []([]byte){datagram1, datagram2, datagram3, datagram4}
 
 	merkleTree = CreateTree(udpDatagrams, 2)
-
-	fmt.Printf("Root node hash : %x \n", merkleTree.Root.Hash)
-	fmt.Printf("Root node children : %d \n", len(merkleTree.Root.Children))
-
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Hash)
-	fmt.Printf("Child2 hash : %x \n", merkleTree.Root.Children[1].Hash)
-
-	fmt.Printf("Root node children : %d \n", len(merkleTree.Root.Children[0].Children))
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Children[0].Hash)
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Children[1].Hash)
-
-	fmt.Printf("Root node children : %d \n", len(merkleTree.Root.Children[1].Children))
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[1].Children[0].Hash)
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[1].Children[1].Hash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 
 	fmt.Printf("\n\n\n")
 
 	merkleTree = CreateTree(udpDatagrams, 3)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 
-	fmt.Printf("Root node hash : %x \n", merkleTree.Root.Hash)
-	fmt.Printf("Root node children : %d \n", len(merkleTree.Root.Children))
+	fmt.Printf("\n\n\n")
 
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Hash)
-	fmt.Printf("Child2 hash : %x \n", merkleTree.Root.Children[1].Hash)
-
-	fmt.Printf("Root node children : %d \n", len(merkleTree.Root.Children[0].Children))
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Children[0].Hash)
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Children[1].Hash)
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[0].Children[2].Hash)
-
-	fmt.Printf("Root node children : %d \n", len(merkleTree.Root.Children[1].Children))
-	fmt.Printf("Child1 hash : %x \n", merkleTree.Root.Children[1].Children[0].Hash)
-
+	merkleTree = CreateTree(udpDatagrams, 4)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 }
