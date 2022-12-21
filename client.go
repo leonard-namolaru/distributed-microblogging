@@ -19,6 +19,9 @@ import (
 	"encoding/binary"
 	//"strconv"
 	"strings"
+	//"os"
+	//"strconv"
+	"bufio"
 )
 
 type id struct {
@@ -63,7 +66,7 @@ func main(){
 	debug = true
 
 	// initialization rand with nanosecond for generate id
-	rand.Seed(int64(time.Now().Nanosecond()))
+	//rand.Seed(int64(time.Now().Nanosecond()))
 
 	// initialization every variable
 	initMyName("Hugo and Lenny")
@@ -73,7 +76,7 @@ func main(){
 	me := CreateHttpClient()
 
 
-	//Step 1 : to get udp address
+	//Step 1 : to get udp address 	OK
 	body := getHttpResponse(me, urlAddress.String())
 	var adressesServer []address
 	err := json.Unmarshal(body, &adressesServer)
@@ -88,7 +91,7 @@ func main(){
 	}
 	
 
-	//Step 2 : to register
+	//Step 2 : to register 	OK
 	jsonIdentity, err := json.Marshal(myId)
 	if err != nil {
 		fmt.Println("error, json.Marshal(myId) : %d\n", err)
@@ -104,7 +107,7 @@ func main(){
 		fmt.Println("END DEBUG STEP 2\n")
 	}
 
-	//Step 3 : to get public key of server
+	//Step 3 : to get public key of server 	OK
 	body = getHttpResponse(me, urlPublicKey.String())
 
 	if debug{
@@ -114,44 +117,51 @@ func main(){
 	}
 	//the server don't sign their messages recently
 
-	//Step 4 : to get adress pair
+	// Step 4 : Hello and HelloReply with the same id 	NON OK
 
-	body = getHttpResponse(me, urlList.String())
+	//myByteId := CreateRandId()
+	myHello := CreateHello(myId.Name)
 
-	if debug{
-		fmt.Println("BEGIN DEBUG STEP 4")
-		fmt.Printf("\tbody : %v\n", body)
-		fmt.Println("END DEBUG STEP 4\n")
+	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v",adressesServer[0].Ip, adressesServer[0].Port))
+	if err != nil {
+		panic(err)
 	}
 
-	bodySplit := strings.Split(string(body), "\n")
-	for i, p := range bodySplit {
-		if debug {
-			fmt.Println(i,p)
-		}
+    connServer, err := net.DialUDP("udp", nil, serverAddr)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Listen at %v\n", serverAddr.String())
 
-		urlPeer := urlList.String() + "/" + p
-		bodyforPeer := getHttpResponse(me, urlPeer)
-		fmt.Printf("ce body : %s\n",bodyforPeer)
-		/*var peer peerId
-		err := json.Unmarshal(bodyforPeer, &peer)
-		if err != nil {
-			log.Fatalf("json.Unmarshal() : %v\n", err)
-		}
+    _, err = connServer.Write(myHello)
+    if err != nil {
+        fmt.Printf("Response err %v", err)
+    }
 
-		if debug{
-			fmt.Printf("peer{\n")
-			fmt.Printf("username : %v\n",peer.Username)
-			fmt.Printf("}\n")
-		}*/
-
+   	response := make([]byte, 1500)
+    readerConnection := bufio.NewReader(connServer)
+	_, err = readerConnection.Read(response)
+	if err != nil {
+		panic("read")
 	}
+	decryptResponse(response)
+
+	helloReply := CreateHelloReply(response)
+
+	 _, err = connServer.Write(helloReply)
+    if err != nil {
+        fmt.Printf("Response err %v", err)
+    }
+
+    readerConnection = bufio.NewReader(connServer)
+	_, err = readerConnection.Read(response)
+	if err != nil {
+		panic("read")
+	}
+	decryptResponse(response)
 
 
-	// Step 5 : Hello and HelloReply with the same id
-
-	myByteId := CreateRandId()
-	myHello := CreateHello("Hugo and Lenny")
+    /*
 	
 	// Unlike Dial, ListenPacket creates a connection without any
 	// association with peers.
@@ -186,8 +196,12 @@ func main(){
 	}
 
 	if debug {
-		fmt.Printf("addr = %v, buf = %s\n",addr, buffer[:n])
+		fmt.Println("Apres ReadFrom (helloReply)")
+		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+		fmt.Printf("My id (hello) : %v and id received (helloReply) : %v\n", []byte(myId.Name)[0:3], buffer[0:3])
 	}
+
+	fmt.Println(n)
 
 	// server must send helloReply
 
@@ -202,11 +216,38 @@ func main(){
 	}
 
 	if debug {
-		fmt.Printf("addr = %v, buf = %s\n",addr, buffer[:n])
+		fmt.Println("Apres ReadFrom (hello)")
+		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
 	}
 
+	fmt.Println(n)
 
-	/*check := true
+		n, addr, err = connection.ReadFrom(buffer[0:])
+	if err != nil {
+		log.Fatal("Timeout !")
+	}
+
+	if debug {
+		fmt.Println("Apres ReadFrom (hello)")
+		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+	}
+
+	fmt.Println(n)
+
+		n, addr, err = connection.ReadFrom(buffer[0:])
+	if err != nil {
+		log.Fatal("Timeout !")
+	}
+
+	if debug {
+		fmt.Println("Apres ReadFrom (hello)")
+		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+	}
+
+	fmt.Println(n)
+
+
+	check := true
 	if len(buffer) >= 4 {
 		for i := range buffer[:4] {
 			if buffer[i] != myByteId[i] {
@@ -216,13 +257,48 @@ func main(){
 		}
 	} else {
 		check = false
-	}*/
-
-	if debug {
-		fmt.Printf("My id (hello) : %v and id received (helloReply) : %v\n", myByteId, buffer[0:4])
 	}
 
+
+
 	connection.Close()
+	*/
+
+	//Step 5 : to get adress pair 	NON OK
+
+	body = getHttpResponse(me, urlList.String())
+
+	if debug{
+		fmt.Println("BEGIN DEBUG STEP 4")
+		fmt.Printf("\tbody : %v\n", body)
+		fmt.Println("END DEBUG STEP 4\n")
+	}
+
+	bodySplit := strings.Split(string(body), "\n")
+	for i, p := range bodySplit {
+		if debug {
+			fmt.Println(i,p)
+		}
+
+		urlPeer := urlList.String() + "/" + p
+		bodyforPeer := getHttpResponse(me, urlPeer)
+		fmt.Printf("ce body : %s\n",bodyforPeer)
+		/*var peer peerId
+		err := json.Unmarshal(bodyforPeer, &peer)
+		if err != nil {
+			log.Fatalf("json.Unmarshal() : %v\n", err)
+		}
+
+		if debug{
+			fmt.Printf("peer{\n")
+			fmt.Printf("username : %v\n",peer.Username)
+			fmt.Printf("}\n")
+		}*/
+
+	}
+
+
+	
 }
 
 func CreateHttpClient() *http.Client {
@@ -403,6 +479,23 @@ func CreateHello(id string) []byte { // signature not implemanted
     }
 	
 	return datagram
+}
+
+func CreateHelloReply(response []byte) []byte {
+	datagram := make([]byte, len(response))
+	copy(datagram[0:3], response[0:3])
+	datagram[4] = 128
+	copy(datagram[5:], response[5:])
+	return datagram
+}
+
+func decryptResponse(response []byte) {
+	id := response[0:3]
+	typeResponse := response[4]
+	lengthBody := response[5] << 8 + response[6]
+	fmt.Printf("Id : %v\n", id)
+	fmt.Printf("type : %v\n", typeResponse)
+	fmt.Printf("taille body : %v\n", lengthBody)
 }
 
 func CreateRandId() []byte {
