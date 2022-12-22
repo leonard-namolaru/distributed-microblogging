@@ -4,14 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
-	"time"
 )
-
-type Message struct {
-	Date      time.Duration // Encoded as a number of seconds since January 1, 2022
-	InReplyTo []byte        // The hash of the message to which this message replies, or 0
-	Body      string        // The message itself, encoded in UTF-8
-}
 
 type MerkleNode struct {
 	ParentNode *MerkleNode   // Pointer to the parent node

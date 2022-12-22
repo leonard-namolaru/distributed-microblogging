@@ -18,6 +18,3 @@ func CreateMicroBloggingMessage(body string, inReplayTo []byte) *Message {
 
 	return &Message{Date: date, InReplyTo: inReplayTo, Body: body}
 }
-
-func main() { // For testing purposes only
-}

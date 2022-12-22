@@ -1,20 +1,22 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"net/http"
+	"crypto/tls"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"net/http"
 	"net/url"
 	"time"
-	"crypto/tls"
-	"io"
-	"net"
+
 	//"math/big"
 	//"crypto/rand"
 	//"string"
 	"bytes"
 	"math/rand"
+
 	//"bufio"
 	"encoding/binary"
 	//"strconv"
@@ -22,23 +24,22 @@ import (
 	//"os"
 	//"strconv"
 	"bufio"
-	vector "container/vector"
 )
 
 type id struct {
-	Name string 	`json:"name"`
-	Key string		`json:"key"`
+	Name string `json:"name"`
+	Key  string `json:"key"`
 }
 
 type peerId struct {
-	Username string 			`json:"name"`
-	Adresses []address			`json:"addresses"`
-	Key string					`json:"key"`
+	Username string    `json:"name"`
+	Adresses []address `json:"addresses"`
+	Key      string    `json:"key"`
 }
 
 type address struct {
-	Ip string 		`json:"ip"`
-	Port uint64 	`json:"port"`
+	Ip   string `json:"ip"`
+	Port uint64 `json:"port"`
 }
 
 /*type IP []byte
@@ -49,21 +50,20 @@ type UDPAddr struct {
 	Zone string // IPv6 scoped addressing zone
 }*/
 
-
 //var p, g, p1, zero, one, a, A, B, s big.Int // a is private key !
 
 var urlAddress, urlRegister, urlPublicKey, urlList url.URL
 
 var myName string
 var myId id
-var mypeers vector 
+var mypeers []peerId
 
 //const NB_BITS = 768 // I don't know if it's the same NB_BITS from the server so I assume NB_BITS = 768 as in the tp
 //const NB_BYTES = NB_BITS / 8
 
 var debug bool
 
-func main(){
+func main() {
 
 	debug = true
 
@@ -77,7 +77,6 @@ func main(){
 	// create client http
 	me := CreateHttpClient()
 
-
 	//Step 1 : to get udp address 	OK
 	body := getHttpResponse(me, urlAddress.String())
 	var adressesServer []address
@@ -86,12 +85,11 @@ func main(){
 		log.Fatalf("json.Unmarshal() : %v\n", err)
 	}
 
-	if debug{
+	if debug {
 		fmt.Println("BEGIN DEBUG STEP 1")
 		fmt.Printf("\treceived address : %v:%v and %v:%v\n", adressesServer[0].Ip, adressesServer[0].Port, adressesServer[1].Ip, adressesServer[1].Port)
 		fmt.Println("END DEBUG STEP 1\n")
 	}
-	
 
 	//Step 2 : to register 	OK
 	jsonIdentity, err := json.Marshal(myId)
@@ -99,12 +97,11 @@ func main(){
 		fmt.Println("error, json.Marshal(myId) : %d\n", err)
 	}
 
-
 	body = postHttpResponse(me, urlRegister.String(), jsonIdentity)
 
-	if debug{
+	if debug {
 		fmt.Println("BEGIN DEBUG STEP 2")
-		fmt.Printf("\tConvertion id : %v\n", string(jsonIdentity) )
+		fmt.Printf("\tConvertion id : %v\n", string(jsonIdentity))
 		fmt.Printf("\tidentity response : %v\n", body)
 		fmt.Println("END DEBUG STEP 2\n")
 	}
@@ -112,9 +109,9 @@ func main(){
 	//Step 3 : to get public key of server 	OK
 	body = getHttpResponse(me, urlPublicKey.String())
 
-	if debug{
+	if debug {
 		fmt.Println("BEGIN DEBUG STEP 3")
-		fmt.Printf("\tpublic key response : %v", string(body) )
+		fmt.Printf("\tpublic key response : %v", string(body))
 		fmt.Println("END DEBUG STEP 3\n")
 	}
 	//the server don't sign their messages recently
@@ -128,27 +125,27 @@ func main(){
 	//myByteId := CreateRandId()
 	myHello := CreateHello(myId.Name)
 
-	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v",adressesServer[0].Ip, adressesServer[0].Port))
+	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v", adressesServer[0].Ip, adressesServer[0].Port))
 	if err != nil {
 		panic(err)
 	}
 
-    connServer, err := net.DialUDP("udp", nil, serverAddr)
-    if err != nil {
-        panic(err)
-    }
+	connServer, err := net.DialUDP("udp", nil, serverAddr)
+	if err != nil {
+		panic(err)
+	}
 
-    if debug {
-    	fmt.Printf("\tListen at %v\n", serverAddr.String())
-    }
+	if debug {
+		fmt.Printf("\tListen at %v\n", serverAddr.String())
+	}
 
-    _, err = connServer.Write(myHello)
-    if err != nil {
-        fmt.Printf("Response err %v", err)
-    }
+	_, err = connServer.Write(myHello)
+	if err != nil {
+		fmt.Printf("Response err %v", err)
+	}
 
-   	response := make([]byte, 1500)
-    readerConnection := bufio.NewReader(connServer)
+	response := make([]byte, 1500)
+	readerConnection := bufio.NewReader(connServer)
 	_, err = readerConnection.Read(response)
 	if err != nil {
 		panic("read")
@@ -160,154 +157,152 @@ func main(){
 
 	helloReply := CreateHelloReply(response)
 
-	 _, err = connServer.Write(helloReply)
-    if err != nil {
-        fmt.Printf("\tResponse err %v", err)
-    }
+	_, err = connServer.Write(helloReply)
+	if err != nil {
+		fmt.Printf("\tResponse err %v", err)
+	}
 
-    readerConnection = bufio.NewReader(connServer)
+	readerConnection = bufio.NewReader(connServer)
 	_, err = readerConnection.Read(response)
 	if err != nil {
 		panic("read")
 	}
-	
 
 	if debug {
 		decryptResponse(response)
 		fmt.Println("END DEBUG STEP 4\n")
 	}
 
+	/*
 
-    /*
-	
-	// Unlike Dial, ListenPacket creates a connection without any
-	// association with peers.
-	connection, err := net.ListenPacket("udp", ":0")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer connection.Close()
-
-	dst, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v",adressesServer[0].Ip, adressesServer[0].Port))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// The connection can write data to the desired address.
-	_, err = connection.WriteTo(myHello, dst)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err != nil {
-		log.Fatal("Function connection.SetReadDeadline() : ", err)
-	}
-
-	buffer := make([]byte, 1500)
-
-	// server must send helloReply
-	n, addr, err := connection.ReadFrom(buffer[0:])
-	if err != nil {
-		log.Fatal("Timeout !")
-	}
-
-	if debug {
-		fmt.Println("Apres ReadFrom (helloReply)")
-		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-		fmt.Printf("My id (hello) : %v and id received (helloReply) : %v\n", []byte(myId.Name)[0:3], buffer[0:3])
-	}
-
-	fmt.Println(n)
-
-	// server must send helloReply
-
-	err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err != nil {
-		log.Fatal("Function connection.SetReadDeadline() : ", err)
-	}
-
-	n, addr, err = connection.ReadFrom(buffer[0:])
-	if err != nil {
-		log.Fatal("Timeout !")
-	}
-
-	if debug {
-		fmt.Println("Apres ReadFrom (hello)")
-		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-	}
-
-	fmt.Println(n)
-
-		n, addr, err = connection.ReadFrom(buffer[0:])
-	if err != nil {
-		log.Fatal("Timeout !")
-	}
-
-	if debug {
-		fmt.Println("Apres ReadFrom (hello)")
-		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-	}
-
-	fmt.Println(n)
-
-		n, addr, err = connection.ReadFrom(buffer[0:])
-	if err != nil {
-		log.Fatal("Timeout !")
-	}
-
-	if debug {
-		fmt.Println("Apres ReadFrom (hello)")
-		fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-	}
-
-	fmt.Println(n)
-
-
-	check := true
-	if len(buffer) >= 4 {
-		for i := range buffer[:4] {
-			if buffer[i] != myByteId[i] {
-				check = false
-				break
-			}
+		// Unlike Dial, ListenPacket creates a connection without any
+		// association with peers.
+		connection, err := net.ListenPacket("udp", ":0")
+		if err != nil {
+			log.Fatal(err)
 		}
-	} else {
-		check = false
-	}
+		defer connection.Close()
+
+		dst, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v",adressesServer[0].Ip, adressesServer[0].Port))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// The connection can write data to the desired address.
+		_, err = connection.WriteTo(myHello, dst)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if err != nil {
+			log.Fatal("Function connection.SetReadDeadline() : ", err)
+		}
+
+		buffer := make([]byte, 1500)
+
+		// server must send helloReply
+		n, addr, err := connection.ReadFrom(buffer[0:])
+		if err != nil {
+			log.Fatal("Timeout !")
+		}
+
+		if debug {
+			fmt.Println("Apres ReadFrom (helloReply)")
+			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+			fmt.Printf("My id (hello) : %v and id received (helloReply) : %v\n", []byte(myId.Name)[0:3], buffer[0:3])
+		}
+
+		fmt.Println(n)
+
+		// server must send helloReply
+
+		err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if err != nil {
+			log.Fatal("Function connection.SetReadDeadline() : ", err)
+		}
+
+		n, addr, err = connection.ReadFrom(buffer[0:])
+		if err != nil {
+			log.Fatal("Timeout !")
+		}
+
+		if debug {
+			fmt.Println("Apres ReadFrom (hello)")
+			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+		}
+
+		fmt.Println(n)
+
+			n, addr, err = connection.ReadFrom(buffer[0:])
+		if err != nil {
+			log.Fatal("Timeout !")
+		}
+
+		if debug {
+			fmt.Println("Apres ReadFrom (hello)")
+			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+		}
+
+		fmt.Println(n)
+
+			n, addr, err = connection.ReadFrom(buffer[0:])
+		if err != nil {
+			log.Fatal("Timeout !")
+		}
+
+		if debug {
+			fmt.Println("Apres ReadFrom (hello)")
+			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
+		}
+
+		fmt.Println(n)
+
+
+		check := true
+		if len(buffer) >= 4 {
+			for i := range buffer[:4] {
+				if buffer[i] != myByteId[i] {
+					check = false
+					break
+				}
+			}
+		} else {
+			check = false
+		}
 
 
 
-	connection.Close()
+		connection.Close()
 	*/
 
 	//Step 5 : to get adress pair 	NON OK
 
 	body = getHttpResponse(me, urlList.String())
 
-	if debug{
+	if debug {
 		fmt.Println("BEGIN DEBUG STEP 5")
 	}
 
 	bodySplit := strings.Split(string(body), "\n")
 	for i, p := range bodySplit {
 		if debug {
-			fmt.Printf("\t%d,%s\n",i,p)
+			fmt.Printf("\t%d,%s\n", i, p)
 		}
 
 		urlPeer := urlList.String() + "/" + p
 		bodyfromPeer := getHttpResponse(me, urlPeer)
-		fmt.Printf("\tbody from peer : %s\n",bodyfromPeer)
+		fmt.Printf("\tbody from peer : %s\n", bodyfromPeer)
 		var mypeer peerId
 		err := json.Unmarshal(bodyfromPeer, &mypeer)
 		if err != nil {
 			//log.Fatalf("json.Unmarshal() : %v\n", err)
 		}
 
-		mypeers.Push(mypeer)
+		mypeers = append(mypeers, mypeer)
 
 		if debug {
-			fmt.Printf("\tmy peer : %s\n", mypeer)
+			fmt.Printf("\tmy peer username : %s\n", mypeer.Username)
 		}
 		/*var peer peerId
 		err := json.Unmarshal(bodyforPeer, &peer)
@@ -324,10 +319,9 @@ func main(){
 	}
 
 	if debug {
-		fmt.Println("END DEBUG STEP 5\n")
+		fmt.Println("END DEBUG STEP 5 \n")
 	}
 
-	
 }
 
 func CreateHttpClient() *http.Client {
@@ -349,11 +343,10 @@ func createPeerId(username string, addressesPeer []address, publicKey string) *p
 	peer := &peerId{
 		Username: username,
 		Adresses: addressesPeer,
-		Key: publicKey,
+		Key:      publicKey,
 	}
 	return peer
-} 
-
+}
 
 func getHttpResponse(client *http.Client, url string) []byte {
 
@@ -383,15 +376,15 @@ func getHttpResponse(client *http.Client, url string) []byte {
 func postHttpResponse(client *http.Client, url string, data []byte) []byte {
 
 	//req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-    resp, err := client.Post(url, "application/json", bytes.NewBuffer(data))
-    if err != nil {
-        panic(err)
-    }
-    body, err := io.ReadAll(resp.Body)
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		panic(err)
+	}
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatalf("io.ReadAll() function : %v", err)
 	}
-    defer resp.Body.Close()
+	defer resp.Body.Close()
 
 	return body
 }
@@ -413,15 +406,14 @@ func postFormHttpResponse(client *http.Client, url string, data url.Values) []by
 	return body
 }
 
-
-func initVar(){
+func initVar() {
 
 	urlAddress = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/udp-address"}
 	urlRegister = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/register"}
 	urlPublicKey = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/server-key"}
 	urlList = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/peers"}
 
-	mypeers = vector.New(0)
+	//mypeers = vector.New(0)
 
 	/*p.SetString("FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A36210000000000090563", 16)
 	g.SetInt64(2)
@@ -440,11 +432,11 @@ func initVar(){
 
 	myId = id{
 		Name: myName,
-		Key: "",
+		Key:  "",
 	}
 }
 
-func initMyName(name string){
+func initMyName(name string) {
 	myName = name
 }
 
@@ -480,7 +472,7 @@ func CreateHello(id string) []byte { // signature not implemanted
 
 	datagram := make([]byte, datagramLength)
 
-	copy(datagram[0:3],id)
+	copy(datagram[0:3], id)
 	datagram[4] = 0
 	datagram[5] = byte(datagramBodyLength >> 8)
 	datagram[6] = byte(datagramBodyLength & 0xFF)
@@ -494,21 +486,21 @@ func CreateHello(id string) []byte { // signature not implemanted
 
 	length := int(datagram[5])<<8 | int(datagram[6])
 
-    body := datagram[7 : 7+length]
+	body := datagram[7 : 7+length]
 
-    if debug {
-    	fmt.Println("\tDEBUT DEBUG HELLO")
-    	fmt.Printf("\t\ttaille de username : %d\n", usernameLength)
-    	fmt.Printf("\t\ttaille datagram: %d\n", len(datagram))
+	if debug {
+		fmt.Println("\tDEBUT DEBUG HELLO")
+		fmt.Printf("\t\ttaille de username : %d\n", usernameLength)
+		fmt.Printf("\t\ttaille datagram: %d\n", len(datagram))
 		fmt.Printf("\t\ttaille datagramBodyLength: %d\n", datagramLength)
 		fmt.Printf("\t\ttaille body: %d\n", datagramBodyLength)
-		fmt.Printf("\t\ttaille body reel: %d\n", len(datagram[idLength + typeLength + lengthLength:]) )
-	    if len(body) < 5 {
-	    	fmt.Printf("len(body) = %d\n",len(body))
+		fmt.Printf("\t\ttaille body reel: %d\n", len(datagram[idLength+typeLength+lengthLength:]))
+		if len(body) < 5 {
+			fmt.Printf("len(body) = %d\n", len(body))
 		}
 		fmt.Println("\tFIN DEBUG HELLO\n")
-    }
-	
+	}
+
 	return datagram
 }
 
@@ -523,7 +515,7 @@ func CreateHelloReply(response []byte) []byte {
 func decryptResponse(response []byte) {
 	id := response[0:3]
 	typeResponse := response[4]
-	lengthBody := response[5] << 8 + response[6]
+	lengthBody := response[5]<<8 + response[6]
 	fmt.Printf("\tId : %s\n", id)
 	fmt.Printf("\ttype : %s\n", typeResponse)
 	fmt.Printf("\ttaille body : %s\n", lengthBody)
@@ -531,7 +523,7 @@ func decryptResponse(response []byte) {
 
 func CreateRandId() []byte {
 	id := new(bytes.Buffer)
-    err := binary.Write(id, binary.LittleEndian, rand.Int31())
+	err := binary.Write(id, binary.LittleEndian, rand.Int31())
 	if err != nil {
 		fmt.Println("binary.Write failed in CreateRandId() :", err)
 	}
