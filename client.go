@@ -1,16 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"math/rand"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 )
@@ -33,6 +30,7 @@ type Address struct {
 
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
+const NAME_FOR_SERVER_REGISTRATION = "Hugo and Leonard"
 
 func main() {
 	//rand.Seed(int64(time.Now().Nanosecond()))
@@ -41,6 +39,7 @@ func main() {
 	urlPublicKey := url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
 	urlList := url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
 
+	/* */
 	httpClient := CreateHttpClient()
 
 	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
@@ -65,7 +64,7 @@ func main() {
 	/* STEP 2 : SERVER REGISTRATION
 	 *  A POST REQUEST TO /register
 	 */
-	serverRegistration := ServerRegistration{Name: "Hugo and Leonard", Key: ""}
+	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: ""}
 	jsonEncoding, err := json.Marshal(serverRegistration)
 	if err != nil {
 		fmt.Println("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
@@ -74,71 +73,37 @@ func main() {
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/register"}
 	httpResponseBody = HttpRequest("POST", httpClient, requestUrl.String(), jsonEncoding)
 
-	//Step 3 : to get public key of server 	OK
+	/* STEP 3 : GET THE SERVER'S PUBLIC KEY
+	 * THE PUBLIC KEY THAT THE SERVER USES TO SIGN MESSAGES IS AVAILABLE AT /server-key.
+	 * IF A GET TO THIS URL RETURNS 404, THE SERVER DOES NOT SIGN ITS MESSAGES.
+	 */
 	httpResponseBody = HttpRequest("GET", httpClient, urlPublicKey.String(), nil)
 
-	if DEBUG_MODE {
-		fmt.Println("BEGIN DEBUG STEP 3")
-		fmt.Printf("\tpublic key response : %v", string(httpResponseBody))
-		fmt.Println("END DEBUG STEP 3\n")
-	}
-	//the server don't sign their messages recently
-
-	// Step 4 : Hello and HelloReply with the same id 	OK BUT WITHOUT net.Listen now
-
-	if DEBUG_MODE {
-		fmt.Println("BEGIN DEBUG STEP 4")
-	}
+	/* STEP 4 : HELLO TO EACH OF THE ADDRESSES OBTAINED IN STEP 1
+	 * ok but without net.Listen
+	 */
 
 	//myByteId := CreateRandId()
 	myHello := CreateHello(serverRegistration.Name)
 
-	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v", serverUdpAddresses[0].Ip, serverUdpAddresses[0].Port))
-	if err != nil {
-		panic(err)
-	}
+	for _, address := range serverUdpAddresses {
+		var full_address string
+		if net.ParseIP(address.Ip).To4() == nil {
+			full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
 
-	connServer, err := net.DialUDP("udp", nil, serverAddr)
-	if err != nil {
-		panic(err)
-	}
+		} else {
+			full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
+		}
+		serverAddr, err := net.ResolveUDPAddr("udp", full_address)
+		if err != nil {
+			panic(err)
+		}
 
-	if DEBUG_MODE {
-		fmt.Printf("\tListen at %v\n", serverAddr.String())
-	}
+		buffer := sendUdp(myHello, serverAddr)
 
-	_, err = connServer.Write(myHello)
-	if err != nil {
-		fmt.Printf("Response err %v", err)
-	}
-
-	response := make([]byte, 1500)
-	readerConnection := bufio.NewReader(connServer)
-	_, err = readerConnection.Read(response)
-	if err != nil {
-		panic("read")
-	}
-
-	if DEBUG_MODE {
-		decryptResponse(response)
-	}
-
-	helloReply := CreateHelloReply(response)
-
-	_, err = connServer.Write(helloReply)
-	if err != nil {
-		fmt.Printf("\tResponse err %v", err)
-	}
-
-	readerConnection = bufio.NewReader(connServer)
-	_, err = readerConnection.Read(response)
-	if err != nil {
-		panic("read")
-	}
-
-	if DEBUG_MODE {
-		decryptResponse(response)
-		fmt.Println("END DEBUG STEP 4\n")
+		if DEBUG_MODE {
+			decryptResponse(buffer)
+		}
 	}
 
 	//Step 5 : to get adress pair 	NON OK
@@ -185,23 +150,6 @@ func createPeerId(username string, addressesPeer []Address, publicKey string) *P
 		Key:      publicKey,
 	}
 	return peer
-}
-
-func postFormHttpResponse(client *http.Client, url string, data url.Values) []byte {
-
-	resp, err := client.PostForm(url, data)
-	if err != nil {
-		log.Fatalf("client.Do() function : %v\n", err)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("io.ReadAll() function : %v", err)
-	}
-
-	defer resp.Body.Close()
-
-	return body
 }
 
 func CreateHello(id string) []byte { // signature not implemanted
