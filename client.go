@@ -1,131 +1,99 @@
 package main
 
 import (
-	"crypto/tls"
+	"bufio"
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
-	"time"
-
-	//"math/big"
-	//"crypto/rand"
-	//"string"
-	"bytes"
-	"math/rand"
-
-	//"bufio"
-	"encoding/binary"
-	//"strconv"
 	"strings"
-	//"os"
-	//"strconv"
-	"bufio"
 )
 
-type id struct {
+type ServerRegistration struct {
 	Name string `json:"name"`
 	Key  string `json:"key"`
 }
 
-type peerId struct {
+type PeerId struct {
 	Username string    `json:"name"`
-	Adresses []address `json:"addresses"`
+	Adresses []Address `json:"addresses"`
 	Key      string    `json:"key"`
 }
 
-type address struct {
+type Address struct {
 	Ip   string `json:"ip"`
 	Port uint64 `json:"port"`
 }
 
-/*type IP []byte
-
-type UDPAddr struct {
-	IP   IP
-	Port int
-	Zone string // IPv6 scoped addressing zone
-}*/
-
-//var p, g, p1, zero, one, a, A, B, s big.Int // a is private key !
-
-var urlAddress, urlRegister, urlPublicKey, urlList url.URL
-
-var myName string
-var myId id
-var mypeers []peerId
-
-//const NB_BITS = 768 // I don't know if it's the same NB_BITS from the server so I assume NB_BITS = 768 as in the tp
-//const NB_BYTES = NB_BITS / 8
-
-var debug bool
+const DEBUG_MODE = true
+const HOST = "jch.irif.fr:8443"
 
 func main() {
-
-	debug = true
-
-	// initialization rand with nanosecond for generate id
 	//rand.Seed(int64(time.Now().Nanosecond()))
+	var mypeers []PeerId
 
-	// initialization every variable
-	initMyName("Hugo and Lenny")
-	initVar()
+	urlPublicKey := url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
+	urlList := url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
 
-	// create client http
-	me := CreateHttpClient()
+	httpClient := CreateHttpClient()
 
-	//Step 1 : to get udp address 	OK
-	body := getHttpResponse(me, urlAddress.String())
-	var adressesServer []address
-	err := json.Unmarshal(body, &adressesServer)
+	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
+	 *  HTTP GET to /udp-address followed by a JSON decode.
+	 */
+	requestUrl := url.URL{Scheme: "https", Host: HOST, Path: "/udp-address"}
+	httpResponseBody := HttpRequest("GET", httpClient, requestUrl.String(), nil)
+
+	var serverUdpAddresses []Address
+	errorMessage := json.Unmarshal(httpResponseBody, &serverUdpAddresses)
+	if errorMessage != nil {
+		log.Fatalf("The method json.Unmarshal() failed at the stage of decoding the UDP addresses of the server : %v \n", errorMessage)
+	}
+
+	if DEBUG_MODE {
+		fmt.Println()
+		for i, address := range serverUdpAddresses {
+			fmt.Printf("%d : address : %s, port : %d \n", i+1, address.Ip, address.Port)
+		}
+	}
+
+	/* STEP 2 : SERVER REGISTRATION
+	 *  A POST REQUEST TO /register
+	 */
+	serverRegistration := ServerRegistration{Name: "Hugo and Leonard", Key: ""}
+	jsonEncoding, err := json.Marshal(serverRegistration)
 	if err != nil {
-		log.Fatalf("json.Unmarshal() : %v\n", err)
+		fmt.Println("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
 	}
 
-	if debug {
-		fmt.Println("BEGIN DEBUG STEP 1")
-		fmt.Printf("\treceived address : %v:%v and %v:%v\n", adressesServer[0].Ip, adressesServer[0].Port, adressesServer[1].Ip, adressesServer[1].Port)
-		fmt.Println("END DEBUG STEP 1\n")
-	}
-
-	//Step 2 : to register 	OK
-	jsonIdentity, err := json.Marshal(myId)
-	if err != nil {
-		fmt.Println("error, json.Marshal(myId) : %d\n", err)
-	}
-
-	body = postHttpResponse(me, urlRegister.String(), jsonIdentity)
-
-	if debug {
-		fmt.Println("BEGIN DEBUG STEP 2")
-		fmt.Printf("\tConvertion id : %v\n", string(jsonIdentity))
-		fmt.Printf("\tidentity response : %v\n", body)
-		fmt.Println("END DEBUG STEP 2\n")
-	}
+	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/register"}
+	httpResponseBody = HttpRequest("POST", httpClient, requestUrl.String(), jsonEncoding)
 
 	//Step 3 : to get public key of server 	OK
-	body = getHttpResponse(me, urlPublicKey.String())
+	httpResponseBody = HttpRequest("GET", httpClient, urlPublicKey.String(), nil)
 
-	if debug {
+	if DEBUG_MODE {
 		fmt.Println("BEGIN DEBUG STEP 3")
-		fmt.Printf("\tpublic key response : %v", string(body))
+		fmt.Printf("\tpublic key response : %v", string(httpResponseBody))
 		fmt.Println("END DEBUG STEP 3\n")
 	}
 	//the server don't sign their messages recently
 
 	// Step 4 : Hello and HelloReply with the same id 	OK BUT WITHOUT net.Listen now
 
-	if debug {
+	if DEBUG_MODE {
 		fmt.Println("BEGIN DEBUG STEP 4")
 	}
 
 	//myByteId := CreateRandId()
-	myHello := CreateHello(myId.Name)
+	myHello := CreateHello(serverRegistration.Name)
 
-	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v", adressesServer[0].Ip, adressesServer[0].Port))
+	serverAddr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v", serverUdpAddresses[0].Ip, serverUdpAddresses[0].Port))
 	if err != nil {
 		panic(err)
 	}
@@ -135,7 +103,7 @@ func main() {
 		panic(err)
 	}
 
-	if debug {
+	if DEBUG_MODE {
 		fmt.Printf("\tListen at %v\n", serverAddr.String())
 	}
 
@@ -151,7 +119,7 @@ func main() {
 		panic("read")
 	}
 
-	if debug {
+	if DEBUG_MODE {
 		decryptResponse(response)
 	}
 
@@ -168,132 +136,29 @@ func main() {
 		panic("read")
 	}
 
-	if debug {
+	if DEBUG_MODE {
 		decryptResponse(response)
 		fmt.Println("END DEBUG STEP 4\n")
 	}
 
-	/*
-
-		// Unlike Dial, ListenPacket creates a connection without any
-		// association with peers.
-		connection, err := net.ListenPacket("udp", ":0")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer connection.Close()
-
-		dst, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%v:%v",adressesServer[0].Ip, adressesServer[0].Port))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// The connection can write data to the desired address.
-		_, err = connection.WriteTo(myHello, dst)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
-		if err != nil {
-			log.Fatal("Function connection.SetReadDeadline() : ", err)
-		}
-
-		buffer := make([]byte, 1500)
-
-		// server must send helloReply
-		n, addr, err := connection.ReadFrom(buffer[0:])
-		if err != nil {
-			log.Fatal("Timeout !")
-		}
-
-		if debug {
-			fmt.Println("Apres ReadFrom (helloReply)")
-			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-			fmt.Printf("My id (hello) : %v and id received (helloReply) : %v\n", []byte(myId.Name)[0:3], buffer[0:3])
-		}
-
-		fmt.Println(n)
-
-		// server must send helloReply
-
-		err = connection.SetReadDeadline(time.Now().Add(2 * time.Second))
-		if err != nil {
-			log.Fatal("Function connection.SetReadDeadline() : ", err)
-		}
-
-		n, addr, err = connection.ReadFrom(buffer[0:])
-		if err != nil {
-			log.Fatal("Timeout !")
-		}
-
-		if debug {
-			fmt.Println("Apres ReadFrom (hello)")
-			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-		}
-
-		fmt.Println(n)
-
-			n, addr, err = connection.ReadFrom(buffer[0:])
-		if err != nil {
-			log.Fatal("Timeout !")
-		}
-
-		if debug {
-			fmt.Println("Apres ReadFrom (hello)")
-			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-		}
-
-		fmt.Println(n)
-
-			n, addr, err = connection.ReadFrom(buffer[0:])
-		if err != nil {
-			log.Fatal("Timeout !")
-		}
-
-		if debug {
-			fmt.Println("Apres ReadFrom (hello)")
-			fmt.Printf("addr = %v, buf = %s\n",addr, buffer)
-		}
-
-		fmt.Println(n)
-
-
-		check := true
-		if len(buffer) >= 4 {
-			for i := range buffer[:4] {
-				if buffer[i] != myByteId[i] {
-					check = false
-					break
-				}
-			}
-		} else {
-			check = false
-		}
-
-
-
-		connection.Close()
-	*/
-
 	//Step 5 : to get adress pair 	NON OK
 
-	body = getHttpResponse(me, urlList.String())
+	httpResponseBody = HttpRequest("GET", httpClient, urlList.String(), nil)
 
-	if debug {
+	if DEBUG_MODE {
 		fmt.Println("BEGIN DEBUG STEP 5")
 	}
 
-	bodySplit := strings.Split(string(body), "\n")
+	bodySplit := strings.Split(string(httpResponseBody), "\n")
 	for i, p := range bodySplit {
-		if debug {
+		if DEBUG_MODE {
 			fmt.Printf("\t%d,%s\n", i, p)
 		}
 
 		urlPeer := urlList.String() + "/" + p
-		bodyfromPeer := getHttpResponse(me, urlPeer)
+		bodyfromPeer := HttpRequest("GET", httpClient, urlPeer, nil)
 		fmt.Printf("\tbody from peer : %s\n", bodyfromPeer)
-		var mypeer peerId
+		var mypeer PeerId
 		err := json.Unmarshal(bodyfromPeer, &mypeer)
 		if err != nil {
 			//log.Fatalf("json.Unmarshal() : %v\n", err)
@@ -301,92 +166,25 @@ func main() {
 
 		mypeers = append(mypeers, mypeer)
 
-		if debug {
+		if DEBUG_MODE {
 			fmt.Printf("\tmy peer username : %s\n", mypeer.Username)
 		}
-		/*var peer peerId
-		err := json.Unmarshal(bodyforPeer, &peer)
-		if err != nil {
-			log.Fatalf("json.Unmarshal() : %v\n", err)
-		}
-
-		if debug{
-			fmt.Printf("peer{\n")
-			fmt.Printf("username : %v\n",peer.Username)
-			fmt.Printf("}\n")
-		}*/
 
 	}
 
-	if debug {
+	if DEBUG_MODE {
 		fmt.Println("END DEBUG STEP 5 \n")
 	}
 
 }
 
-func CreateHttpClient() *http.Client {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.MaxIdleConns = 100
-	t.MaxConnsPerHost = 100
-	t.MaxIdleConnsPerHost = 100
-	t.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-
-	client := &http.Client{
-		Timeout:   10 * time.Second, //if no response break the connection
-		Transport: t,
-	}
-
-	return client
-}
-
-func createPeerId(username string, addressesPeer []address, publicKey string) *peerId {
-	peer := &peerId{
+func createPeerId(username string, addressesPeer []Address, publicKey string) *PeerId {
+	peer := &PeerId{
 		Username: username,
 		Adresses: addressesPeer,
 		Key:      publicKey,
 	}
 	return peer
-}
-
-func getHttpResponse(client *http.Client, url string) []byte {
-
-	// func http.NewRequest(method string, url string, body io.Reader) (*http.Request, error)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		log.Fatalf("http.NewRequest() function : %v\n", err)
-	}
-
-	// func (*http.Client).Do(req *http.Request) (*http.Response, error)
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Fatalf("client.Do() function : %v\n", err)
-	}
-
-	// func io.ReadAll(r io.Reader) ([]byte, error)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("io.ReadAll() function : %v", err)
-	}
-
-	defer resp.Body.Close()
-
-	return body
-}
-
-func postHttpResponse(client *http.Client, url string, data []byte) []byte {
-
-	//req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(data))
-	if err != nil {
-		panic(err)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("io.ReadAll() function : %v", err)
-	}
-	defer resp.Body.Close()
-
-	return body
 }
 
 func postFormHttpResponse(client *http.Client, url string, data url.Values) []byte {
@@ -405,57 +203,6 @@ func postFormHttpResponse(client *http.Client, url string, data url.Values) []by
 
 	return body
 }
-
-func initVar() {
-
-	urlAddress = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/udp-address"}
-	urlRegister = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/register"}
-	urlPublicKey = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/server-key"}
-	urlList = url.URL{Scheme: "https", Host: "jch.irif.fr:8443", Path: "/peers"}
-
-	//mypeers = vector.New(0)
-
-	/*p.SetString("FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A63A36210000000000090563", 16)
-	g.SetInt64(2)
-	zero.SetInt64(0)
-	one.SetInt64(1)
-	p1.Sub(&p, &one)
-
-	buffer_of_bits := make([]byte, NB_BYTES)
-	_, errorMessage := rand.Read(buffer_of_bits)
-	if errorMessage != nil {
-		log.Fatal("rand.Read() function : ", errorMessage)
-	}
-
-	a.SetBytes(buffer_of_bits)
-	A.Exp(&g, &a, &p)*/
-
-	myId = id{
-		Name: myName,
-		Key:  "",
-	}
-}
-
-func initMyName(name string) {
-	myName = name
-}
-
-/*begin := time.Date(2022, 1, 1, 1, 0, 0, 0, time.Local) // first janvier 2022
-
-func CreateMessage(sendedMessage string,receivedHasedMessage string) []byte { //warning hash or no hash ?
-
-	datagramBody := len(sendedMessage)
-	datagram := make([]byte, 1+4+32+datagramBody)
-	datagram[0] = 0
-	duration := time.Since(begin)
-	copy(datagram[1:5],duration.MarshalBinary()) // warning : signed or nor signed ?
-	copy(datagram,[6:38]byte(receivedHasedMessage))
-	datagram[39] = byte(datagram_body_length >> 8)
-	datagram[40] = byte(datagram_body_length & 0xFF)
-	copy(datagram[1:], []byte(sendedMessage))
-
-	return datagram
-}*/
 
 func CreateHello(id string) []byte { // signature not implemanted
 
@@ -488,7 +235,7 @@ func CreateHello(id string) []byte { // signature not implemanted
 
 	body := datagram[7 : 7+length]
 
-	if debug {
+	if DEBUG_MODE {
 		fmt.Println("\tDEBUT DEBUG HELLO")
 		fmt.Printf("\t\ttaille de username : %d\n", usernameLength)
 		fmt.Printf("\t\ttaille datagram: %d\n", len(datagram))
