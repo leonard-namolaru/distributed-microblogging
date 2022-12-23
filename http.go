@@ -28,7 +28,7 @@ func CreateHttpClient() *http.Client {
 	return client
 }
 
-func HttpRequest(requestType string, client *http.Client, requestUrl string, data []byte) []byte {
+func HttpRequest(requestType string, client *http.Client, requestUrl string, data []byte) ([]byte, int) {
 	var req *http.Request
 	var errorMessage error
 	if DEBUG_MODE {
@@ -70,10 +70,11 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 
 	response.Body.Close() // func (io.Closer).Close() error
 	if DEBUG_MODE {
+		fmt.Printf("HTTP RESPONSE STATUS CODE : %d \n", response.StatusCode)
 		fmt.Printf("HTTP RESPONSE BODY :\n%s \n", responseBody)
 	}
 
-	return responseBody
+	return responseBody, response.StatusCode
 }
 
 func sendUdp2(datagram []byte, address *net.UDPAddr) []byte {
@@ -101,9 +102,8 @@ func sendUdp(datagram []byte, address *net.UDPAddr) []byte {
 	for i := 0; !responseReceived; i++ {
 		if DEBUG_MODE {
 			fmt.Println()
-			fmt.Printf("WE SEND A A UDP DATAGRAMME TO : %s \n", address.String())
-			fmt.Printf("THE DATAGRAMME AS BYTES : %v \n", datagram)
-			fmt.Printf("THE DATAGRAMME AS STRING : %s \n", datagram)
+			fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
+			PrintDatagram(datagram)
 		}
 
 		// func (net.Conn).Write(b []byte) (n int, err error)
@@ -147,9 +147,9 @@ func sendUdp(datagram []byte, address *net.UDPAddr) []byte {
 
 			if !allZero && DEBUG_MODE {
 				responseReceived = true
-				//log.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME : \n")
-				//log.Printf("THE DATAGRAMME AS BYTES : %v \n", buffer)
-				//log.Printf("THE DATAGRAMME AS STRING : %s \n", buffer)
+				fmt.Println()
+				fmt.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME : \n")
+				PrintDatagram(buffer)
 			} else {
 				log.Printf("TIMEOUT !")
 			}

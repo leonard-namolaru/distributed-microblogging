@@ -136,6 +136,7 @@ func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *Merkl
 	fmt.Printf("Number of children : %d \n", len(merkleNode.Children))
 }
 
+/*
 func main() { // For testing purposes only
 	var merkleTree *MerkleTree
 
@@ -163,3 +164,4 @@ func main() { // For testing purposes only
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHashInBytes)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 }
+*/
