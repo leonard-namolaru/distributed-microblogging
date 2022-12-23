@@ -17,7 +17,7 @@ type ServerRegistration struct {
 	Key  string `json:"key"`
 }
 
-type PeerId struct {
+type Peer struct {
 	Username string    `json:"name"`
 	Adresses []Address `json:"addresses"`
 	Key      string    `json:"key"`
@@ -34,12 +34,6 @@ const NAME_FOR_SERVER_REGISTRATION = "Hugo and Leonard"
 
 func main() {
 	//rand.Seed(int64(time.Now().Nanosecond()))
-	var mypeers []PeerId
-
-	urlPublicKey := url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
-	urlList := url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
-
-	/* */
 	httpClient := CreateHttpClient()
 
 	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
@@ -77,7 +71,8 @@ func main() {
 	 * THE PUBLIC KEY THAT THE SERVER USES TO SIGN MESSAGES IS AVAILABLE AT /server-key.
 	 * IF A GET TO THIS URL RETURNS 404, THE SERVER DOES NOT SIGN ITS MESSAGES.
 	 */
-	httpResponseBody = HttpRequest("GET", httpClient, urlPublicKey.String(), nil)
+	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
+	httpResponseBody = HttpRequest("GET", httpClient, requestUrl.String(), nil)
 
 	/* STEP 4 : HELLO TO EACH OF THE ADDRESSES OBTAINED IN STEP 1
 	 * ok but without net.Listen
@@ -106,45 +101,49 @@ func main() {
 		}
 	}
 
-	//Step 5 : to get adress pair 	NON OK
+	/* STEP 5 : LIST OF PEERS KNOWN TO THE SERVER
+	 * A GET REQUEST TO THE URL /peers.
+	 * THE SERVER RESPONDS WITH THE BODY CONTAINING A LIST OF PEER NAMES, ONE PER LINE.
+	 */
+	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
+	httpResponseBody = HttpRequest("GET", httpClient, requestUrl.String(), nil)
 
-	httpResponseBody = HttpRequest("GET", httpClient, urlList.String(), nil)
+	/* STEP 6 : PEER ADDRESSES
+	 * TO LOCATE A PEER NAMED p, THE CLIENT MAKES A GET REQUEST TO THE URL /peers/p.
+	 * THE RESPONSE BODY CONTAINS A JSON OBJECT
+	 */
+	var peers []Peer
 
-	if DEBUG_MODE {
-		fmt.Println("BEGIN DEBUG STEP 5")
-	}
+	bodyAfterSplit := strings.Split(string(httpResponseBody), "\n")
+	for _, p := range bodyAfterSplit {
 
-	bodySplit := strings.Split(string(httpResponseBody), "\n")
-	for i, p := range bodySplit {
-		if DEBUG_MODE {
-			fmt.Printf("\t%d,%s\n", i, p)
+		if len(p) != 0 {
+			peerUrl := requestUrl.String() + "/" + p
+			bodyfromPeer := HttpRequest("GET", httpClient, peerUrl, nil)
+
+			var peer Peer
+			err := json.Unmarshal(bodyfromPeer, &peer)
+			if err != nil {
+				log.Fatalf("The method json.Unmarshal() failed at the stage of decoding the json object received as an answer from %s : %v\n", peerUrl, err)
+			}
+
+			peers = append(peers, peer)
+
+			if DEBUG_MODE {
+				fmt.Printf("Peer key : %s\n", peer.Key)
+
+				for i, address := range peer.Adresses {
+					fmt.Printf("Peer ip %d : %s\n", i+1, address.Ip)
+					fmt.Printf("Peer port %d : %d\n", i+1, address.Port)
+				}
+			}
 		}
-
-		urlPeer := urlList.String() + "/" + p
-		bodyfromPeer := HttpRequest("GET", httpClient, urlPeer, nil)
-		fmt.Printf("\tbody from peer : %s\n", bodyfromPeer)
-		var mypeer PeerId
-		err := json.Unmarshal(bodyfromPeer, &mypeer)
-		if err != nil {
-			//log.Fatalf("json.Unmarshal() : %v\n", err)
-		}
-
-		mypeers = append(mypeers, mypeer)
-
-		if DEBUG_MODE {
-			fmt.Printf("\tmy peer username : %s\n", mypeer.Username)
-		}
-
-	}
-
-	if DEBUG_MODE {
-		fmt.Println("END DEBUG STEP 5 \n")
 	}
 
 }
 
-func createPeerId(username string, addressesPeer []Address, publicKey string) *PeerId {
-	peer := &PeerId{
+func createPeer(username string, addressesPeer []Address, publicKey string) *Peer {
+	peer := &Peer{
 		Username: username,
 		Adresses: addressesPeer,
 		Key:      publicKey,
@@ -179,23 +178,23 @@ func CreateHello(id string) []byte { // signature not implemanted
 	copy(datagram[12:], id)
 	//copy(datagram[14+usernameLength:], myId.Name)
 
-	length := int(datagram[5])<<8 | int(datagram[6])
+	//length := int(datagram[5])<<8 | int(datagram[6])
 
-	body := datagram[7 : 7+length]
-
-	if DEBUG_MODE {
-		fmt.Println("\tDEBUT DEBUG HELLO")
-		fmt.Printf("\t\ttaille de username : %d\n", usernameLength)
-		fmt.Printf("\t\ttaille datagram: %d\n", len(datagram))
-		fmt.Printf("\t\ttaille datagramBodyLength: %d\n", datagramLength)
-		fmt.Printf("\t\ttaille body: %d\n", datagramBodyLength)
-		fmt.Printf("\t\ttaille body reel: %d\n", len(datagram[idLength+typeLength+lengthLength:]))
-		if len(body) < 5 {
-			fmt.Printf("len(body) = %d\n", len(body))
+	//body := datagram[7 : 7+length]
+	/*
+		if DEBUG_MODE {
+			fmt.Println("\tDEBUT DEBUG HELLO")
+			fmt.Printf("\t\ttaille de username : %d\n", usernameLength)
+			fmt.Printf("\t\ttaille datagram: %d\n", len(datagram))
+			fmt.Printf("\t\ttaille datagramBodyLength: %d\n", datagramLength)
+			fmt.Printf("\t\ttaille body: %d\n", datagramBodyLength)
+			fmt.Printf("\t\ttaille body reel: %d\n", len(datagram[idLength+typeLength+lengthLength:]))
+			if len(body) < 5 {
+				fmt.Printf("len(body) = %d\n", len(body))
+			}
+			fmt.Println("\tFIN DEBUG HELLO\n")
 		}
-		fmt.Println("\tFIN DEBUG HELLO\n")
-	}
-
+	*/
 	return datagram
 }
 
