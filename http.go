@@ -77,13 +77,49 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	return responseBody, response.StatusCode
 }
 
-func sendUdp2(datagram []byte, address *net.UDPAddr) []byte {
+func sendUdp2(datagram []byte, address *net.UDPAddr, post int, conn net.PacketConn) []byte {
 	var buffer []byte
 
-	// func net.Dial(network string, address string) (net.Conn, error)
-	_, errorMessage := net.ListenPacket("udp4", "81.194.27.155:1194")
-	if errorMessage != nil {
-		log.Fatalf("The method net.ListenUDP() failed in sendUdp() to address  %s : %v\n", address, errorMessage)
+	fmt.Println()
+	fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
+	PrintDatagram(datagram)
+
+	_, err := conn.WriteTo(datagram, address)
+	if err != nil {
+		log.Printf("WriteTo: %v", err)
+	}
+
+	buf := make([]byte, 1500)
+	for i := 0; i < 7; i++ {
+		// func (c *UDPConn) SetReadDeadline(t time.Time) error
+		errorMessage := conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		if errorMessage != nil {
+			log.Fatalf("The method connection.SetReadDeadline() failed in sendUdp() to address  %s : %v\n", address, errorMessage)
+		}
+
+		_, addr, err := conn.ReadFrom(buf)
+		if err != nil {
+			log.Printf("ReadFrom: %v \n", err)
+			continue
+		}
+
+		fmt.Println(addr.String())
+		fmt.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME : \n")
+		PrintDatagram(buf)
+
+		if i != 0 {
+			buf2 := CreateHelloReply(buf)
+			fmt.Println()
+			fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
+			PrintDatagram(buf2)
+
+			_, err = conn.WriteTo(buf2, addr)
+			if err != nil {
+				log.Printf("WriteTo: %v", err)
+			}
+
+		}
+
 	}
 
 	return buffer
