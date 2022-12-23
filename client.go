@@ -30,7 +30,7 @@ type Address struct {
 
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
-const NAME_FOR_SERVER_REGISTRATION = "hugo.leonard"
+const NAME_FOR_SERVER_REGISTRATION = "hugoleonard2"
 
 func main() {
 	//rand.Seed(int64(time.Now().Nanosecond()))
@@ -78,9 +78,9 @@ func main() {
 	 */
 
 	//myByteId := CreateRandId()
-	myHello := HelloDatagram("TTTT", serverRegistration.Name)
+	myHello := HelloDatagram("RTTT", serverRegistration.Name)
 	// func net.Dial(network string, address string) (net.Conn, error)
-	conn, errorMessage := net.ListenPacket("udp", fmt.Sprintf(":%d", 1194))
+	conn, errorMessage := net.ListenPacket("udp", fmt.Sprintf(":%d", 8082))
 	if errorMessage != nil {
 		log.Fatalf("The method net.ListenUDP() failed in sendUdp() to address : %v\n", errorMessage)
 	}
@@ -144,9 +144,6 @@ func main() {
 
 		}
 	}
-
-	HttpRequest("GET", httpClient, "https://jch.irif.fr:8443/peers/hugo.leonard", nil)
-
 }
 
 func createPeer(username string, addressesPeer []Address, publicKey string) *Peer {
@@ -156,14 +153,6 @@ func createPeer(username string, addressesPeer []Address, publicKey string) *Pee
 		Key:      publicKey,
 	}
 	return peer
-}
-
-func CreateHelloReply(response []byte) []byte {
-	datagram := make([]byte, len(response))
-	copy(datagram[0:4], response[0:4])
-	datagram[4] = 128
-	copy(datagram[5:], response[5:])
-	return datagram
 }
 
 func CreateRandId() []byte {

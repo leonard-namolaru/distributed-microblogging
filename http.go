@@ -33,7 +33,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	var errorMessage error
 	if DEBUG_MODE {
 		fmt.Println()
-		fmt.Printf("HTTP %v REQUEST : %v \n", requestType, requestUrl)
+		log.Printf("HTTP %v REQUEST : %v \n", requestType, requestUrl)
 
 		if requestType == "POST" {
 			fmt.Printf("BODY OF THE REQUEST : %s \n", data)
@@ -80,7 +80,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 func sendUdp2(datagram []byte, address *net.UDPAddr, post int, conn net.PacketConn) []byte {
 	var buffer []byte
 
-	fmt.Println()
+	log.Println()
 	fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
 	PrintDatagram(datagram)
 
@@ -103,12 +103,12 @@ func sendUdp2(datagram []byte, address *net.UDPAddr, post int, conn net.PacketCo
 			continue
 		}
 
-		fmt.Println(addr.String())
+		log.Println(addr.String())
 		fmt.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME : \n")
 		PrintDatagram(buf)
 
 		if i != 0 {
-			buf2 := CreateHelloReply(buf)
+			buf2 := HelloReplayDatagram(string(buf[0:4]), NAME_FOR_SERVER_REGISTRATION)
 			fmt.Println()
 			fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
 			PrintDatagram(buf2)

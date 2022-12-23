@@ -89,3 +89,18 @@ func HelloDatagram(id string, userName string) []byte {
 
 	return datagram
 }
+
+func HelloReplayDatagram(id string, userName string) []byte {
+	usernameLength := len(userName)
+	datagramBodyLength := HELLO_DATAGRAM_BODY_MIN_LENGTH + usernameLength
+	datagramLength := DATAGRAM_MIN_LENGTH + datagramBodyLength + SIGNATURE_LENGTH
+
+	// type = 128
+	datagram := datagramGeneralStructure([]byte(id), 128, datagramBodyLength, datagramLength)
+
+	copy(datagram[7:11], []byte{0, 0, 0, 0})
+	datagram[11] = byte(usernameLength)
+	copy(datagram[12:], userName)
+
+	return datagram
+}
