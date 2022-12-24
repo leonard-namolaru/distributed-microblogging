@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"crypto/sha256"
+	"fmt"
 )
 
-const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024 
+const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
 
 const DATAGRAM_MIN_LENGTH = 4 + 1 + 2 // For Id, Type, Length
 const SIGNATURE_LENGTH = 0
@@ -15,11 +15,14 @@ const INTERNAL_NODE_DATAGRAM_MIN_LENGTH = 1     // For the Type field
 const LEAF_DATAGRAM_MIN_LENGTH = 1 + 4 + 32 + 2 // For the Type, Date, In-reply-toLength and Length fields
 
 const ROOT_BODY_LENGTH = 32
+const ROOT_REQUEST_BODY_LENGTH = 0
 
 const ID_LENGTH = 4
 const ID_FIRST_BYTE = 0
 
 const TYPE_BYTE = 4
+
+const BODY_FIRST_BYTE = 7
 
 // General structure of a datagram
 func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyLength int, datagramLength int) []byte {
@@ -116,15 +119,17 @@ func HelloReplayDatagram(id string, userName string) []byte {
 }
 
 /********************************************** ROOT_REQUEST, ROOT **********************************************/
+func RootRequestDatagram(id string) []byte {
+	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_REQUEST_BODY_LENGTH + SIGNATURE_LENGTH
+	datagram := datagramGeneralStructure([]byte(id), ROOT_REQUEST_TYPE, ROOT_REQUEST_BODY_LENGTH, datagramLength)
+	return datagram
+}
 
 func RootDatagram(id string) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), ROOT_TYPE, ROOT_BODY_LENGTH, datagramLength)
 
 	hash := sha256.New()
-	copy(datagram[7:], hash.Sum([]byte{})) // Temporary solution: we answer with the hash of the empty data
+	copy(datagram[BODY_FIRST_BYTE:], hash.Sum([]byte{})) // Temporary solution: we answer with the hash of the empty data
 	return datagram
 }
-
-
-

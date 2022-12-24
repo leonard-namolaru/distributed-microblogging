@@ -34,6 +34,8 @@ const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
 
 func main() {
 	//rand.Seed(int64(time.Now().Nanosecond()))
+	var datagram_id = "idid"
+
 	httpClient := CreateHttpClient()
 
 	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
@@ -74,7 +76,6 @@ func main() {
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
 	httpResponseBody, _ = HttpRequest("GET", httpClient, requestUrl.String(), nil)
 
-
 	/* STEP 4 : HELLO TO EACH OF THE ADDRESSES OBTAINED IN STEP 1
 	 */
 
@@ -101,8 +102,7 @@ func main() {
 			panic(err)
 		}
 
-		UdpWrite(conn, "idid", 0, serverAddr)
-
+		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr)
 	}
 
 	/* STEP 5 : LIST OF PEERS KNOWN TO THE SERVER
@@ -144,6 +144,27 @@ func main() {
 				}
 			}
 
+		}
+	}
+
+	/* STEP 7 : HELLO TO ALL PEER ADDRESSES
+	 */
+	for _, peer := range peers {
+		for _, address := range peer.Adresses {
+			var full_address string
+
+			if net.ParseIP(address.Ip).To4() == nil {
+				full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
+
+			} else {
+				full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
+			}
+			serverAddr, err := net.ResolveUDPAddr("udp", full_address)
+			if err != nil {
+				panic(err)
+			}
+
+			UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr)
 		}
 	}
 

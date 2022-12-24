@@ -83,7 +83,6 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	return responseBody, response.StatusCode
 }
 
-
 func UdpRead(conn net.PacketConn) {
 
 	buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES)
@@ -103,24 +102,28 @@ func UdpRead(conn net.PacketConn) {
 		}
 
 		switch buf[TYPE_BYTE] {
-			case byte(HELLO_TYPE) :
-				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE + ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress)
-			case byte(ROOT_REQUEST_TYPE) :
-				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE + ID_LENGTH]), ROOT_TYPE, udpAddress)
+		case byte(HELLO_TYPE):
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress)
+		case byte(ROOT_REQUEST_TYPE):
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress)
 		}
 	}
 }
 
 func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr) {
-	 var datagram []byte
+	var datagram []byte
 
 	switch datagramType {
-		case HELLO_TYPE :
-			datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)	
-		case HELLO_REPLAY_TYPE :
-			datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
-		case ROOT_TYPE :
-			datagram = RootDatagram(datagramId)
+	case HELLO_TYPE:
+		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+	case HELLO_REPLAY_TYPE:
+		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+	case ROOT_REQUEST_TYPE:
+		datagram = RootRequestDatagram(datagramId)
+	case ROOT_TYPE:
+		datagram = RootDatagram(datagramId)
+	default:
+		return
 	}
 
 	fmt.Println()
@@ -132,9 +135,6 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		log.Fatal("The method WriteTo failed in udpRead() to %s : %v", address.String(), err)
 	}
 }
-
-
-
 
 func UdpConnection(datagram []byte, address *net.UDPAddr) []byte {
 	var buffer []byte
