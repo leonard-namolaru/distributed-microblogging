@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+const HELLO_TYPE = 0
+const HELLO_REPLAY_TYPE = 128
+
+const ROOT_REQUEST_TYPE = 1
+const ROOT_TYPE = 129
+
 func CreateHttpClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConns = 100
@@ -80,7 +86,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 
 func UdpRead(conn net.PacketConn) {
 
-	buf := make([]byte, 1500)
+	buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES)
 	for {
 		_, address, err := conn.ReadFrom(buf)
 		if err != nil {
@@ -91,13 +97,16 @@ func UdpRead(conn net.PacketConn) {
 		log.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME FROM %s : \n", address.String())
 		PrintDatagram(buf)
 
-		if buf[4] == byte(0) {
-			addr, err := net.ResolveUDPAddr("udp", address.String())
-			if err != nil {
-				panic(err)
-			}
-	
-			UdpWrite(conn, string(buf[0:4]), 128, addr)
+		udpAddress, err := net.ResolveUDPAddr("udp", address.String())
+		if err != nil {
+			log.Fatal("The method net.ResolveUDPAddr() failed in udpRead() during the resolve of the address %s : %v \n", address.String(), err)
+		}
+
+		switch buf[TYPE_BYTE] {
+			case byte(HELLO_TYPE) :
+				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE + ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress)
+			case byte(ROOT_REQUEST_TYPE) :
+				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE + ID_LENGTH]), ROOT_TYPE, udpAddress)
 		}
 	}
 }
@@ -106,10 +115,12 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 	 var datagram []byte
 
 	switch datagramType {
-	case 0 :
-		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)	
-	case 128 :
-		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+		case HELLO_TYPE :
+			datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)	
+		case HELLO_REPLAY_TYPE :
+			datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+		case ROOT_TYPE :
+			datagram = RootDatagram(datagramId)
 	}
 
 	fmt.Println()
