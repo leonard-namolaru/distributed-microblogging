@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/tls"
 	"fmt"
@@ -10,8 +9,20 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 )
+
+type WaitingResponse struct {
+	FullAddress   net.UDPAddr
+	DatagramTypes []int
+	Id            []byte
+}
+
+type OpenSession struct {
+	FullAddress      net.UDPAddr
+	LastDatagramTime time.Time
+}
 
 const ERROR_TYPE = 254
 
@@ -24,6 +35,9 @@ const ROOT_TYPE = 129
 const GET_DATUM_TYPE = 2
 const DATUM_TYPE = 130
 const NO_DATUM_TYPE = 131
+
+var waitingResponses []WaitingResponse
+var mutex sync.Mutex
 
 func CreateHttpClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -109,116 +123,116 @@ func UdpRead(conn net.PacketConn) {
 			log.Fatal("The method net.ResolveUDPAddr() failed in udpRead() during the resolve of the address %s : %v \n", address.String(), err)
 		}
 
+		mutex.Lock()
+		i := sliceContainsAddress(waitingResponses, address.String())
+		if i != -1 {
+			//id := buf[ID_FIRST_BYTE : ID_FIRST_BYTE+ID_LENGTH]
+			datagramType := buf[TYPE_BYTE]
+
+			if sliceContainsInt(waitingResponses[i].DatagramTypes, int(datagramType)) != -1 {
+				waitingResponses = append(waitingResponses[:i], waitingResponses[i+1:]...)
+			}
+		}
+		mutex.Unlock()
+
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil)
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
+		case byte(GET_DATUM_TYPE):
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), NO_DATUM_TYPE, udpAddress, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+GET_DATUM_BODY_LENGTH])
 		}
 	}
 }
 
 func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr, data []byte) {
 	var datagram []byte
+	var responseOptions []int
+	var responseReceived bool
+	var waitingResponse WaitingResponse
 
 	switch datagramType {
 	case HELLO_TYPE:
 		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+		responseOptions = append(responseOptions, HELLO_REPLAY_TYPE)
 	case HELLO_REPLAY_TYPE:
 		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+		responseOptions = append(responseOptions, HELLO_REPLAY_TYPE)
 	case ROOT_REQUEST_TYPE:
 		datagram = RootRequestDatagram(datagramId)
+		responseOptions = append(responseOptions, ROOT_TYPE)
 	case ROOT_TYPE:
 		datagram = RootDatagram(datagramId)
 	case GET_DATUM_TYPE:
+		datagram = GetDatumDatagram(datagramId, data)
+		responseOptions = append(responseOptions, NO_DATUM_TYPE, DATUM_TYPE)
+	case NO_DATUM_TYPE:
 		datagram = GetDatumDatagram(datagramId, data)
 	default:
 		return
 	}
 
-	if DEBUG_MODE {
-		fmt.Println()
-		log.Printf("WE SEND A DATAGRAM TO : %s \n", address)
-		PrintDatagram(true, address.String(), datagram)
+	if len(responseOptions) != 0 {
+		mutex.Lock()
+		waitingResponse = WaitingResponse{FullAddress: *address, DatagramTypes: responseOptions}
+		waitingResponses = append(waitingResponses, waitingResponse)
+		mutex.Unlock()
+		responseReceived = false
+	} else {
+		responseReceived = true
 	}
 
-	_, err := conn.WriteTo(datagram, address)
-	if err != nil {
-		log.Fatal("The method WriteTo failed in udpRead() to %s : %v", address.String(), err)
-	}
-}
-
-func UdpConnection(datagram []byte, address *net.UDPAddr) []byte {
-	var buffer []byte
-
-	// func net.Dial(network string, address string) (net.Conn, error)
-	connection, errorMessage := net.DialUDP("udp", nil, address)
-	if errorMessage != nil {
-		log.Fatalf("The method net.DialUDP() failed in sendUdp() to address  %s : %v\n", address, errorMessage)
-	}
-
-	responseReceived := false
-	for i := 0; !responseReceived; i++ {
+	for i := 0; !responseReceived && i < 4; i++ {
 		if DEBUG_MODE {
 			fmt.Println()
-			log.Printf("WE SEND A DATAGRAM TO : %s \n", address.String())
+			log.Printf("WE SEND A DATAGRAM TO : %s \n", address)
 			PrintDatagram(true, address.String(), datagram)
 		}
 
-		// func (net.Conn).Write(b []byte) (n int, err error)
-		_, errorMessage = connection.Write(datagram)
-		if errorMessage != nil {
-			log.Fatalf("The method connection.Write() failed in sendUdp() to address  %s : %v\n", address, errorMessage)
+		_, err := conn.WriteTo(datagram, address)
+		if err != nil {
+			log.Fatal("The method WriteTo failed in udpWrite() to %s : %v", address.String(), err)
 		}
 
-		buffer = make([]byte, 1500)
-
-		// Exponential growth (Croissance exponentielle)
-		// Formula : f(x)=a(1+r)^{x}
-		// a    =   initial amount
-		// r	=	growth rate
-		// {x}	=	number of time intervals
-		// Source : Google ("Exponential growth Formula")
-		r := 1
-		readDeadline := 2 * math.Pow(float64(1+r), float64(i))
-
-		// func (c *UDPConn) SetReadDeadline(t time.Time) error
-		errorMessage = connection.SetReadDeadline(time.Now().Add(time.Duration(readDeadline) * time.Second))
-		if errorMessage != nil {
-			log.Fatalf("The method connection.SetReadDeadline() failed in sendUdp() to address  %s : %v\n", address, errorMessage)
-		}
-
-		if DEBUG_MODE {
-			log.Printf("READ DEADLINE : %d SEC \n", int64(readDeadline))
-		}
-
-		_, errorMessage = bufio.NewReader(connection).Read(buffer)
-		if errorMessage != nil && int64(readDeadline) >= 60 {
-			log.Fatalf("Timeout !")
-		} else {
-			allZero := true
-			for i := range buffer {
-				if buffer[i] != 0 {
-					allZero = false
-					break
-				}
+		if len(responseOptions) != 0 {
+			// Exponential growth (Croissance exponentielle)
+			// Formula : f(x)=a(1+r)^{x}
+			// a    =   initial amount
+			// r	=	growth rate
+			// {x}	=	number of time intervals
+			// Source : Google ("Exponential growth Formula")
+			r := 1
+			timeOut := 2 * math.Pow(float64(1+r), float64(i))
+			if DEBUG_MODE {
+				log.Printf("TIMEOUT AFTER %.2f SEC \n", timeOut)
 			}
 
-			if !allZero {
+			time.Sleep(time.Duration(timeOut * float64(time.Second)))
+			mutex.Lock()
+			if sliceContainsAddress(waitingResponses, waitingResponse.FullAddress.String()) == -1 {
 				responseReceived = true
-				if DEBUG_MODE {
-					fmt.Println()
-					log.Printf("WE RECEIVE A DATAGRAM FROM %s : \n", address.String())
-					PrintDatagram(false, address.String(), buffer)
-				}
-			} else {
-				if DEBUG_MODE {
-					log.Printf("TIMEOUT !")
-				}
 			}
+			mutex.Unlock()
 		}
 	}
 
-	connection.Close() // func (net.Conn).Close() error
-	return buffer
+}
+
+func sliceContainsAddress(slice []WaitingResponse, address string) int {
+	for i, element := range slice {
+		if element.FullAddress.String() == address {
+			return i
+		}
+	}
+	return -1
+}
+
+func sliceContainsInt(slice []int, intValue int) int {
+	for i, element := range slice {
+		if element == intValue {
+			return i
+		}
+	}
+	return -1
 }

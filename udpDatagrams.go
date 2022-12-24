@@ -89,7 +89,6 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte) {
 
 	case byte(NO_DATUM_TYPE):
 		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
 	}
 
 	fmt.Print(str)
@@ -180,6 +179,14 @@ func RootDatagram(id string) []byte {
 func GetDatumDatagram(id string, hash []byte) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + GET_DATUM_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), GET_DATUM_TYPE, GET_DATUM_BODY_LENGTH, datagramLength)
+
+	copy(datagram[BODY_FIRST_BYTE:], hash)
+	return datagram
+}
+
+func NoDatumDatagram(id string, hash []byte) []byte {
+	datagramLength := DATAGRAM_MIN_LENGTH + NO_DATUM_BODY_LENGTH + SIGNATURE_LENGTH
+	datagram := datagramGeneralStructure([]byte(id), NO_DATUM_TYPE, NO_DATUM_BODY_LENGTH, datagramLength)
 
 	copy(datagram[BODY_FIRST_BYTE:], hash)
 	return datagram
