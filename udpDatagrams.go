@@ -24,6 +24,12 @@ const TYPE_BYTE = 4
 
 const BODY_FIRST_BYTE = 7
 
+const FLAGS_FIRST_BYTE = 7
+const FLAGS_LENGTH = 4
+
+const USER_NAME_LENGTH_BYTE = 11
+const USER_NAME_FIRST_BYTE = 12
+
 // General structure of a datagram
 func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyLength int, datagramLength int) []byte {
 	datagram := make([]byte, datagramLength)
@@ -36,21 +42,42 @@ func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyL
 	return datagram
 }
 
-func PrintDatagram(datagram []byte) {
-	lengthBody := datagram[5]<<8 + datagram[6]
-	//lengthBody := int(datagram[5])<<8 | int(datagram[6])
+func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte) {
+	var str string
+	str = ""
 
-	fmt.Printf("THE DATAGRAMME AS BYTES : %v \n", datagram[:(DATAGRAM_MIN_LENGTH+lengthBody+SIGNATURE_LENGTH)])
-	fmt.Printf("THE DATAGRAMME AS STRING : %s \n", datagram)
+	bodyLength := int(datagram[5]) + int(datagram[6])
+	id := datagram[ID_FIRST_BYTE : ID_FIRST_BYTE+ID_LENGTH]
+	datagramType := datagram[TYPE_BYTE]
 
-	id := datagram[0:4]
-	responseType := datagram[4]
-	fmt.Printf("ID : %s TYPE : %d LENGTH : %d  \n", id, responseType, lengthBody)
+	//if !isDatagramWeSent {
+	//	str += fmt.Sprintf("THE UDP DATAGRAM (from %s) :\n", address)
+	//} else {
+	//	str += fmt.Sprintf("THE UDP DATAGRAM (to : %s) :\n", address)
+	//}
 
-	if lengthBody > 0 {
-		body := datagram[12:]
-		fmt.Printf("BODY : %s \n", body)
+	str += fmt.Sprintf("THE DATAGRAM AS BYTES : %v \n", datagram[:(DATAGRAM_MIN_LENGTH+bodyLength+SIGNATURE_LENGTH)])
+	str += fmt.Sprintf("ID : %v TYPE : %d LENGTH : %d  \n", id, datagramType, bodyLength)
+
+	switch datagramType {
+	case byte(HELLO_TYPE):
+		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
+		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
+			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
+
+	case byte(HELLO_REPLAY_TYPE):
+		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
+		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
+			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
+
+	case byte(ROOT_TYPE):
+		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
+	case byte(ERROR_TYPE):
+		str += fmt.Sprintf("BODY : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
 	}
+
+	fmt.Print(str)
 }
 
 /********************************************** MERKEL TREE **********************************************/

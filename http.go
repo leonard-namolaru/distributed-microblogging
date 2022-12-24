@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const ERROR_TYPE = 254
+
 const HELLO_TYPE = 0
 const HELLO_REPLAY_TYPE = 128
 
@@ -84,17 +86,19 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 }
 
 func UdpRead(conn net.PacketConn) {
-
 	buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES)
+
 	for {
 		_, address, err := conn.ReadFrom(buf)
 		if err != nil {
 			log.Fatal("The method conn.ReadFrom() failed in udpRead() : %v \n", err)
 		}
 
-		fmt.Println()
-		log.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME FROM %s : \n", address.String())
-		PrintDatagram(buf)
+		if DEBUG_MODE {
+			fmt.Println()
+			log.Printf("WE RECEIVE A DATAGRAM FROM %s : \n", address)
+			PrintDatagram(false, address.String(), buf)
+		}
 
 		udpAddress, err := net.ResolveUDPAddr("udp", address.String())
 		if err != nil {
@@ -126,9 +130,11 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		return
 	}
 
-	fmt.Println()
-	log.Printf("WE SEND A UDP DATAGRAM TO : %s \n", address.String())
-	PrintDatagram(datagram)
+	if DEBUG_MODE {
+		fmt.Println()
+		log.Printf("WE SEND A DATAGRAM TO : %s \n", address)
+		PrintDatagram(true, address.String(), datagram)
+	}
 
 	_, err := conn.WriteTo(datagram, address)
 	if err != nil {
@@ -149,8 +155,8 @@ func UdpConnection(datagram []byte, address *net.UDPAddr) []byte {
 	for i := 0; !responseReceived; i++ {
 		if DEBUG_MODE {
 			fmt.Println()
-			fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
-			PrintDatagram(datagram)
+			log.Printf("WE SEND A DATAGRAM TO : %s \n", address.String())
+			PrintDatagram(true, address.String(), datagram)
 		}
 
 		// func (net.Conn).Write(b []byte) (n int, err error)
@@ -192,13 +198,17 @@ func UdpConnection(datagram []byte, address *net.UDPAddr) []byte {
 				}
 			}
 
-			if !allZero && DEBUG_MODE {
+			if !allZero {
 				responseReceived = true
-				fmt.Println()
-				fmt.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME : \n")
-				PrintDatagram(buffer)
+				if DEBUG_MODE {
+					fmt.Println()
+					log.Printf("WE RECEIVE A DATAGRAM FROM %s : \n", address.String())
+					PrintDatagram(false, address.String(), buffer)
+				}
 			} else {
-				log.Printf("TIMEOUT !")
+				if DEBUG_MODE {
+					log.Printf("TIMEOUT !")
+				}
 			}
 		}
 	}

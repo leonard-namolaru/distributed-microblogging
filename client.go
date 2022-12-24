@@ -150,21 +150,46 @@ func main() {
 	/* STEP 7 : HELLO TO ALL PEER ADDRESSES
 	 */
 	for _, peer := range peers {
-		for _, address := range peer.Adresses {
-			var full_address string
+		if peer.Username != NAME_FOR_SERVER_REGISTRATION {
+			for _, address := range peer.Adresses {
+				var full_address string
 
-			if net.ParseIP(address.Ip).To4() == nil {
-				full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
+				if net.ParseIP(address.Ip).To4() == nil {
+					full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
 
-			} else {
-				full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
+				} else {
+					full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
+				}
+				serverAddr, err := net.ResolveUDPAddr("udp", full_address)
+				if err != nil {
+					panic(err)
+				}
+
+				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr)
 			}
-			serverAddr, err := net.ResolveUDPAddr("udp", full_address)
-			if err != nil {
-				panic(err)
-			}
+		}
+	}
 
-			UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr)
+	/* STEP 8 : ROOT REQUEST TO ALL PEER ADDRESSES
+	 */
+	for _, peer := range peers {
+		if peer.Username != NAME_FOR_SERVER_REGISTRATION {
+			for _, address := range peer.Adresses {
+				var full_address string
+
+				if net.ParseIP(address.Ip).To4() == nil {
+					full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
+
+				} else {
+					full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
+				}
+				serverAddr, err := net.ResolveUDPAddr("udp", full_address)
+				if err != nil {
+					panic(err)
+				}
+
+				UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, serverAddr)
+			}
 		}
 	}
 
