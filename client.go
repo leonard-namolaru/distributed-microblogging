@@ -30,7 +30,7 @@ type Address struct {
 
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
-const NAME_FOR_SERVER_REGISTRATION = "hugoleonard2"
+const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
 
 func main() {
 	//rand.Seed(int64(time.Now().Nanosecond()))
@@ -74,17 +74,19 @@ func main() {
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
 	httpResponseBody, _ = HttpRequest("GET", httpClient, requestUrl.String(), nil)
 
+
 	/* STEP 4 : HELLO TO EACH OF THE ADDRESSES OBTAINED IN STEP 1
 	 */
 
 	//myByteId := CreateRandId()
-	myHello := HelloDatagram("RTTT", serverRegistration.Name)
+
 	// func net.Dial(network string, address string) (net.Conn, error)
-	conn, errorMessage := net.ListenPacket("udp", fmt.Sprintf(":%d", 8082))
+	conn, errorMessage := net.ListenPacket("udp", fmt.Sprintf(":%d", 8081))
 	if errorMessage != nil {
 		log.Fatalf("The method net.ListenUDP() failed in sendUdp() to address : %v\n", errorMessage)
 	}
-	log.Printf("Connected")
+	log.Printf("Listening to :%d \n", 8082)
+	go UdpRead(conn)
 
 	for _, address := range serverUdpAddresses {
 		var full_address string
@@ -99,7 +101,7 @@ func main() {
 			panic(err)
 		}
 
-		_ = sendUdp2(myHello, serverAddr, 3, conn)
+		UdpWrite(conn, "idid", 0, serverAddr)
 
 	}
 
@@ -144,6 +146,12 @@ func main() {
 
 		}
 	}
+
+	fmt.Println()
+	log.Printf("WAITING FOR NEW MESSAGES... \n")
+	for {
+	}
+
 }
 
 func createPeer(username string, addressesPeer []Address, publicKey string) *Peer {

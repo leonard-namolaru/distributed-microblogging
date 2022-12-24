@@ -77,55 +77,55 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	return responseBody, response.StatusCode
 }
 
-func sendUdp2(datagram []byte, address *net.UDPAddr, post int, conn net.PacketConn) []byte {
-	var buffer []byte
 
-	log.Println()
-	fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
+func UdpRead(conn net.PacketConn) {
+
+	buf := make([]byte, 1500)
+	for {
+		_, address, err := conn.ReadFrom(buf)
+		if err != nil {
+			log.Fatal("The method conn.ReadFrom() failed in udpRead() : %v \n", err)
+		}
+
+		fmt.Println()
+		log.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME FROM %s : \n", address.String())
+		PrintDatagram(buf)
+
+		if buf[4] == byte(0) {
+			addr, err := net.ResolveUDPAddr("udp", address.String())
+			if err != nil {
+				panic(err)
+			}
+	
+			UdpWrite(conn, string(buf[0:4]), 128, addr)
+		}
+	}
+}
+
+func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr) {
+	 var datagram []byte
+
+	switch datagramType {
+	case 0 :
+		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)	
+	case 128 :
+		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+	}
+
+	fmt.Println()
+	log.Printf("WE SEND A UDP DATAGRAM TO : %s \n", address.String())
 	PrintDatagram(datagram)
 
 	_, err := conn.WriteTo(datagram, address)
 	if err != nil {
-		log.Printf("WriteTo: %v", err)
+		log.Fatal("The method WriteTo failed in udpRead() to %s : %v", address.String(), err)
 	}
-
-	buf := make([]byte, 1500)
-	for i := 0; i < 7; i++ {
-		// func (c *UDPConn) SetReadDeadline(t time.Time) error
-		errorMessage := conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-		if errorMessage != nil {
-			log.Fatalf("The method connection.SetReadDeadline() failed in sendUdp() to address  %s : %v\n", address, errorMessage)
-		}
-
-		_, addr, err := conn.ReadFrom(buf)
-		if err != nil {
-			log.Printf("ReadFrom: %v \n", err)
-			continue
-		}
-
-		log.Println(addr.String())
-		fmt.Printf("WE RECEIVE THE FOLLOWING UDP DATAGRAMME : \n")
-		PrintDatagram(buf)
-
-		if i != 0 {
-			buf2 := HelloReplayDatagram(string(buf[0:4]), NAME_FOR_SERVER_REGISTRATION)
-			fmt.Println()
-			fmt.Printf("WE SEND A UDP DATAGRAMME TO : %s \n", address.String())
-			PrintDatagram(buf2)
-
-			_, err = conn.WriteTo(buf2, addr)
-			if err != nil {
-				log.Printf("WriteTo: %v", err)
-			}
-
-		}
-
-	}
-
-	return buffer
 }
 
-func sendUdp(datagram []byte, address *net.UDPAddr) []byte {
+
+
+
+func UdpConnection(datagram []byte, address *net.UDPAddr) []byte {
 	var buffer []byte
 
 	// func net.Dial(network string, address string) (net.Conn, error)
