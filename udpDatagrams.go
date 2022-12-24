@@ -17,6 +17,9 @@ const LEAF_DATAGRAM_MIN_LENGTH = 1 + 4 + 32 + 2 // For the Type, Date, In-reply-
 const ROOT_BODY_LENGTH = 32
 const ROOT_REQUEST_BODY_LENGTH = 0
 
+const GET_DATUM_BODY_LENGTH = 32
+const NO_DATUM_BODY_LENGTH = 32
+
 const ID_LENGTH = 4
 const ID_FIRST_BYTE = 0
 
@@ -29,6 +32,8 @@ const FLAGS_LENGTH = 4
 
 const USER_NAME_LENGTH_BYTE = 11
 const USER_NAME_FIRST_BYTE = 12
+
+const HASH_LENGTH = 32
 
 // General structure of a datagram
 func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyLength int, datagramLength int) []byte {
@@ -75,6 +80,16 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte) {
 
 	case byte(ERROR_TYPE):
 		str += fmt.Sprintf("BODY : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
+	case byte(DATUM_TYPE):
+		str += fmt.Sprintf("BODY  Hash : %x Value : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+HASH_LENGTH], datagram[BODY_FIRST_BYTE+HASH_LENGTH+4*8:])
+
+	case byte(GET_DATUM_TYPE):
+		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
+	case byte(NO_DATUM_TYPE):
+		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
 	}
 
 	fmt.Print(str)
@@ -158,5 +173,14 @@ func RootDatagram(id string) []byte {
 
 	hash := sha256.New()
 	copy(datagram[BODY_FIRST_BYTE:], hash.Sum([]byte{})) // Temporary solution: we answer with the hash of the empty data
+	return datagram
+}
+
+/********************************************** DATUM, GET_DATUM, NO_DATUM **********************************************/
+func GetDatumDatagram(id string, hash []byte) []byte {
+	datagramLength := DATAGRAM_MIN_LENGTH + GET_DATUM_BODY_LENGTH + SIGNATURE_LENGTH
+	datagram := datagramGeneralStructure([]byte(id), GET_DATUM_TYPE, GET_DATUM_BODY_LENGTH, datagramLength)
+
+	copy(datagram[BODY_FIRST_BYTE:], hash)
 	return datagram
 }

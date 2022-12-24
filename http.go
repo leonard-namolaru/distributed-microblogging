@@ -21,6 +21,10 @@ const HELLO_REPLAY_TYPE = 128
 const ROOT_REQUEST_TYPE = 1
 const ROOT_TYPE = 129
 
+const GET_DATUM_TYPE = 2
+const DATUM_TYPE = 130
+const NO_DATUM_TYPE = 131
+
 func CreateHttpClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConns = 100
@@ -107,14 +111,14 @@ func UdpRead(conn net.PacketConn) {
 
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE):
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress)
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil)
 		case byte(ROOT_REQUEST_TYPE):
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress)
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
 		}
 	}
 }
 
-func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr) {
+func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr, data []byte) {
 	var datagram []byte
 
 	switch datagramType {
@@ -126,6 +130,8 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		datagram = RootRequestDatagram(datagramId)
 	case ROOT_TYPE:
 		datagram = RootDatagram(datagramId)
+	case GET_DATUM_TYPE:
+		datagram = GetDatumDatagram(datagramId, data)
 	default:
 		return
 	}
