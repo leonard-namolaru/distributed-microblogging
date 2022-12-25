@@ -6,12 +6,14 @@ import (
 	"log"
 )
 
+const NODE_TYPE_INTERNAL = 1
+
 type MerkleNode struct {
 	ParentNode *MerkleNode   // Pointer to the parent node
 	Children   []*MerkleNode // A table of pointers to the child nodes
 	IsLeaf     bool          // Boolean value. Is it a leaf or an internal/root node?
-	Hash       []byte        // The label of each node is a hash. In the case of a leaf, it is a hash of a UDP datagram
-	message    Message       // Only if the node is a leaf
+	Hash       []byte
+	Data       []byte
 }
 
 type MerkleTree struct {
@@ -19,14 +21,14 @@ type MerkleTree struct {
 	MaxArity int         // The maximum number of children of each node
 }
 
-/* A function that receives a list of UDP datagrams as well as the maximum number of children in each node,
- * and returns a pointer to a Merkel tree containing all these datagrams.
+/* A function that receives a list of messages as well as the maximum number of children in each node,
+ * and returns a pointer to a Merkel tree containing all these messages.
  */
-func CreateTree(UdpDatagrams [][]byte, maxArity int) *MerkleTree {
+func CreateTree(messages [][]byte, maxArity int) *MerkleTree {
 	var merkleTree MerkleTree
 	merkleTree.MaxArity = maxArity
 
-	leafs := merkleTree.createLeafNodes(UdpDatagrams)
+	leafs := merkleTree.createLeafNodes(messages)
 
 	root := merkleTree.createNodes(leafs)
 	merkleTree.Root = root
@@ -34,25 +36,27 @@ func CreateTree(UdpDatagrams [][]byte, maxArity int) *MerkleTree {
 	return &merkleTree
 }
 
-/* Internal function. This function receives a list of UDP datagrams and returns leaves for those datagrams
+/* Internal function. This function receives a list messages and returns leaves for those messages
  * (list of leaf pointers).
  */
-func (merkleTree *MerkleTree) createLeafNodes(UdpDatagrams [][]byte) []*MerkleNode {
+func (merkleTree *MerkleTree) createLeafNodes(messages [][]byte) []*MerkleNode {
 	var leafs []*MerkleNode
 
-	for i := 0; i < len(UdpDatagrams); i++ {
+	for i := 0; i < len(messages); i++ {
 		hash := sha256.New()
 
-		_, errorMessage := hash.Write(UdpDatagrams[i])
+		_, errorMessage := hash.Write(messages[i])
 		if errorMessage != nil {
-			log.Fatal("Error : unable to generate a hash for a UDP datagram \n")
+			log.Fatal("Error : unable to generate a hash for a message \n")
 		}
 
 		leafs = append(leafs, &MerkleNode{
 			Hash:       hash.Sum(nil),
 			IsLeaf:     true,
 			Children:   nil,
-			ParentNode: nil}) // Will be determined later
+			ParentNode: nil, // Will be determined later
+			Data:       messages[i],
+		})
 	}
 
 	return leafs
@@ -69,6 +73,7 @@ func (merkleTree *MerkleTree) createNodes(leafNodes []*MerkleNode) *MerkleNode {
 		var hashesConcatenation []byte
 		var children []*MerkleNode
 
+		hash := sha256.New()
 		merkleNode := &MerkleNode{}
 		for j := i; j < len(leafNodes) && (j-i) < merkleTree.MaxArity; j++ {
 			// Each internal node is a concatenation of byte strings of the hashes of its children
@@ -77,8 +82,16 @@ func (merkleTree *MerkleTree) createNodes(leafNodes []*MerkleNode) *MerkleNode {
 			leafNodes[j].ParentNode = merkleNode
 		}
 
+		hashesConcatenation = append([]byte{NODE_TYPE_INTERNAL}, hashesConcatenation...)
+		_, errorMessage := hash.Write(hashesConcatenation)
+		if errorMessage != nil {
+			log.Fatal("Error : unable to generate a hash for hashes concatenation \n")
+		}
+
 		merkleNode.Children = children
-		merkleNode.Hash = hashesConcatenation
+		merkleNode.Hash = hash.Sum(nil)
+		merkleNode.Data = hashesConcatenation
+		merkleNode.IsLeaf = false
 		merkleNodes = append(merkleNodes, merkleNode)
 
 		if len(leafNodes) <= merkleTree.MaxArity {
@@ -120,12 +133,20 @@ func (merkleTree *MerkleTree) PrintNodeHash(counter int, merkleNode *MerkleNode)
 	fmt.Printf("Hash : %x \n", merkleNode.Hash)
 }
 
-func (merkleTree *MerkleTree) PrintNodeHashInBytes(counter int, merkleNode *MerkleNode) {
+func (merkleTree *MerkleTree) PrintNodeData(counter int, merkleNode *MerkleNode) {
 	for i := 0; i < counter; i++ {
 		fmt.Printf("\t")
 	}
 
-	fmt.Printf("Hash : %v \n", merkleNode.Hash)
+	fmt.Printf("Data : %x \n", merkleNode.Data)
+}
+
+func (merkleTree *MerkleTree) PrintNodeDataInBytes(counter int, merkleNode *MerkleNode) {
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+
+	fmt.Printf("Data : %v \n", merkleNode.Data)
 }
 
 func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *MerkleNode) {
@@ -134,6 +155,17 @@ func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *Merkl
 	}
 
 	fmt.Printf("Number of children : %d \n", len(merkleNode.Children))
+}
+
+func (merkleTree *MerkleTree) PrintTest(counter int, merkleNode *MerkleNode) {
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+	if merkleNode.IsLeaf {
+		fmt.Printf("Leaf hash : %x \n", merkleNode.Hash)
+	} else {
+		fmt.Printf("Node data : %x \n", merkleNode.Data)
+	}
 }
 
 /*
@@ -148,20 +180,19 @@ func main() { // For testing purposes only
 	udpDatagrams := []([]byte){datagram1, datagram2, datagram3, datagram4}
 
 	merkleTree = CreateTree(udpDatagrams, 2)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 
 	fmt.Printf("\n\n\n")
 
 	merkleTree = CreateTree(udpDatagrams, 3)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 
 	fmt.Printf("\n\n\n")
 
 	merkleTree = CreateTree(udpDatagrams, 4)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHash)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNodeHashInBytes)
+	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
 }
 */

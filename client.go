@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -31,12 +32,40 @@ type Address struct {
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
 const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
+const MERKLE_TREE_MAX_ARITY = 32
+
+var thisPeerMerkleTree *MerkleTree
 
 func main() {
 	//rand.Seed(int64(time.Now().Nanosecond()))
 	var datagram_id = "idid"
 
 	httpClient := CreateHttpClient()
+
+	/* A LIST OF MESSAGES AVAILABLE TO THE OTHER PEERS
+	 */
+	messages := make([][]byte, 33)
+	for i := 0; i < len(messages); i++ {
+		var inReplyTo []byte
+		messageBody := fmt.Sprintf("Message %d", i+1)
+
+		if i%2 != 0 {
+			hash := sha256.New()
+			_, errorMessage := hash.Write(messages[i-1])
+			if errorMessage != nil {
+				log.Fatal("Error : unable to generate a hash for a message \n")
+			}
+			inReplyTo = hash.Sum(nil)
+		} else {
+			inReplyTo = inReplyToZeroes()
+		}
+
+		messages[i] = CreateMessage(messageBody, inReplyTo)
+	}
+
+	thisPeerMerkleTree := CreateTree(messages, MERKLE_TREE_MAX_ARITY)
+	thisPeerMerkleTree.DepthFirstSearch(0, thisPeerMerkleTree.PrintTest)
+	thisPeerMerkleTree.DepthFirstSearch(0, thisPeerMerkleTree.PrintNumberChildren)
 
 	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
 	 *  HTTP GET to /udp-address followed by a JSON decode.
@@ -211,3 +240,11 @@ func CreateRandId() []byte {
 	}
 	return id.Bytes()
 }
+
+/*
+func CreateRandId2() []byte {
+	var id [4]byte
+	copy(id, rand.Int31())
+	return id
+}
+*/

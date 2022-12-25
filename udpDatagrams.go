@@ -1,10 +1,12 @@
 package main
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"log"
+	"time"
 )
+
+var JANUARY_1_2022 = time.Date(2022, 1, 1, 1, 0, 0, 0, time.Local) // January 1, 2022
 
 const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
 
@@ -35,6 +37,19 @@ const USER_NAME_LENGTH_BYTE = 11
 const USER_NAME_FIRST_BYTE = 12
 
 const HASH_LENGTH = 32
+
+/* ***** */
+
+const NODE_TYPE_BYTE = 0
+
+const MESSAGE_DATE_FIRST_BYTE = 1
+const MESSAGE_DATE_LENGTH = 4
+const MESSAGE_IN_REPLY_TO_FIRST_BYTE = 5
+const MESSAFE_IN_REPLY_TO_LENGTH = 32
+const MESSAFE_LENGTH_FIRST_BYTE = 37
+const MESSAGE_LENGTH_LENGTH = 2
+const MESSAGE_BODY_FIRST_BYTE = 39
+const MESSAGE_TOTAL_MIN_LENGTH = 1 + MESSAGE_DATE_LENGTH + MESSAFE_IN_REPLY_TO_LENGTH + MESSAGE_LENGTH_LENGTH // 1 for the type byte
 
 // General structure of a datagram
 func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyLength int, datagramLength int) []byte {
@@ -101,37 +116,33 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeO
 }
 
 /********************************************** MERKEL TREE **********************************************/
+func CreateMessage(body string, inReplyTo []byte) []byte {
+	timeSinceJanuary := fmt.Sprintf("%.2f", time.Since(JANUARY_1_2022).Seconds())
 
-func MerkleInternalNodeToUdp(merkleNode *MerkleNode) []byte {
-	var datagram_type byte = 1 // Type 1 indicates that this is an internal node.
+	messageBodyLength := len(body)
+	datagramLength := MESSAGE_TOTAL_MIN_LENGTH + messageBodyLength
+	datagram := make([]byte, datagramLength)
 
-	datagram_length := INTERNAL_NODE_DATAGRAM_MIN_LENGTH + len(merkleNode.Hash)
-	datagram := make([]byte, datagram_length)
+	datagram[NODE_TYPE_BYTE] = 0 // Type 0 indicates that it is a message
+	copy(datagram[MESSAGE_DATE_FIRST_BYTE:MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH], []byte(timeSinceJanuary))
+	copy(datagram[MESSAGE_IN_REPLY_TO_FIRST_BYTE:MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH], inReplyTo)
+	datagram[MESSAFE_LENGTH_FIRST_BYTE] = byte(messageBodyLength >> 8)
+	datagram[MESSAFE_LENGTH_FIRST_BYTE+1] = byte(messageBodyLength & 0xFF)
 
-	datagram[0] = datagram_type
-	copy(datagram[1:], merkleNode.Hash)
-
+	copy(datagram[MESSAGE_BODY_FIRST_BYTE:], []byte(body))
 	return datagram
 }
 
-func LeafToUdp(merkleNode *MerkleNode) []byte {
-	var datagram_type byte = 0 // Type 0 indicates that it is a message
+// In-reply-to indicates the hash of the message to which a message replies.
+// It is 0 if a message does not respond to another message. Field size : 32 bytes.
+func inReplyToZeroes() []byte {
+	inReplyTo := make([]byte, MESSAFE_IN_REPLY_TO_LENGTH)
 
-	message_body_length := len(merkleNode.message.Body)
-	datagram_length := LEAF_DATAGRAM_MIN_LENGTH + message_body_length
-	datagram := make([]byte, datagram_length)
+	for i := 0; i < len(inReplyTo); i++ {
+		inReplyTo[i] = 0
+	}
 
-	datagram[0] = datagram_type
-	copy(datagram[1:4], []byte(merkleNode.message.Date.String())) // warning : signed or nor signed ?
-	copy(datagram[4:36], merkleNode.message.InReplyTo)
-	copy(datagram[4:36], merkleNode.message.InReplyTo)
-
-	datagram[36] = byte(message_body_length >> 8)
-	datagram[37] = byte(message_body_length & 0xFF)
-
-	copy(datagram[LEAF_DATAGRAM_MIN_LENGTH:], merkleNode.message.Body)
-
-	return datagram
+	return inReplyTo
 }
 
 /********************************************** HELLO, HELLO_REPLY **********************************************/
@@ -176,8 +187,7 @@ func RootDatagram(id string) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), ROOT_TYPE, ROOT_BODY_LENGTH, datagramLength)
 
-	hash := sha256.New()
-	copy(datagram[BODY_FIRST_BYTE:], hash.Sum([]byte{})) // Temporary solution: we answer with the hash of the empty data
+	copy(datagram[BODY_FIRST_BYTE:], thisPeerMerkleTree.Root.Hash)
 	return datagram
 }
 
