@@ -182,11 +182,8 @@ func main() {
 	/* STEP 9 : USING THE HASH OF THE ROOT IN ORDER TO OBTAIN THE INFORMATION THAT THE HASH REPRESENTS
 	 */
 	for _, session := range sessionsWeOpened {
-		if session.merkleTree != nil {
-			session.merkleTree.DepthFirstSearch(0, session.merkleTree.PrintNodeHash)
-			session.merkleTree.DepthFirstSearch(0, session.merkleTree.PrintNumberChildren)
-
-			UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &session.FullAddress, session.merkleTree.Root.Hash)
+		if session.RootHash != nil {
+			UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &session.FullAddress, session.RootHash)
 		}
 	}
 

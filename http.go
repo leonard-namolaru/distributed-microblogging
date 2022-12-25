@@ -27,7 +27,8 @@ type OpenSession struct {
 type SessionWeOpened struct {
 	FullAddress      net.UDPAddr
 	LastDatagramTime time.Time
-	merkleTree       *MerkleTree
+	Merkle           *MerkleTree
+	RootHash         []byte
 }
 
 const ERROR_TYPE = 254
@@ -145,7 +146,7 @@ func UdpRead(conn net.PacketConn) {
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := SessionWeOpened{FullAddress: *udpAddress, LastDatagramTime: time.Now(), merkleTree: nil}
+						sessionWeOpened := SessionWeOpened{FullAddress: *udpAddress, LastDatagramTime: time.Now(), Merkle: nil, RootHash: nil}
 						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
 				}
@@ -194,9 +195,7 @@ func UdpRead(conn net.PacketConn) {
 		case ROOT_TYPE:
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
 			if i != -1 {
-				if sessionsWeOpened[i].merkleTree == nil {
-					sessionsWeOpened[i].merkleTree = CreateTree([]([]byte){buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+ROOT_BODY_LENGTH]}, 32)
-				}
+				sessionsWeOpened[i].RootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+ROOT_BODY_LENGTH]
 			}
 		}
 	}
