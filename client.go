@@ -147,7 +147,7 @@ func main() {
 		}
 	}
 
-	/* STEP 7 : HELLO TO ALL PEER ADDRESSES
+	/* STEP 7 : HELLO TO (ALL) PEER ADDRESSES
 	 */
 	for _, peer := range peers {
 		if peer.Username == "jch" || peer.Username == "bet" {
@@ -174,24 +174,24 @@ func main() {
 	 */
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
-		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.IP.String() != serverUdpAddresses[1].Ip {
-			if session.FullAddress.Port != int(serverUdpAddresses[0].Port) && session.FullAddress.Port != int(serverUdpAddresses[1].Port) {
-				UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
-			}
-
+		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
+			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
 		}
 	}
 
-	/* STEP 9 :
+	/* STEP 9 : USING THE HASH OF THE ROOT IN ORDER TO OBTAIN THE INFORMATION THAT THE HASH REPRESENTS
 	 */
-	fmt.Println()
-	serverAddr, err := net.ResolveUDPAddr("udp", "[2a01:e0a:283:47b0:ba:7bff:fed5:c602]:1111")
-	if err != nil {
-		panic(err)
+	for _, session := range sessionsWeOpened {
+		if session.merkleTree != nil {
+			session.merkleTree.DepthFirstSearch(0, session.merkleTree.PrintNodeHash)
+			session.merkleTree.DepthFirstSearch(0, session.merkleTree.PrintNumberChildren)
+
+			UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &session.FullAddress, session.merkleTree.Root.Hash)
+		}
 	}
 
-	UdpWrite(conn, datagram_id, GET_DATUM_TYPE, serverAddr, []byte{80, 118, 133, 10, 109, 125, 229, 201, 82, 105, 128, 65, 40, 17, 68, 247, 5, 223, 18, 113, 2, 67, 177, 164, 28, 236, 120, 121, 129, 106, 44, 144})
-
+	fmt.Println()
+	fmt.Printf("...\n")
 	for {
 	}
 

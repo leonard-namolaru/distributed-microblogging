@@ -24,6 +24,12 @@ type OpenSession struct {
 	LastDatagramTime time.Time
 }
 
+type SessionWeOpened struct {
+	FullAddress      net.UDPAddr
+	LastDatagramTime time.Time
+	merkleTree       *MerkleTree
+}
+
 const ERROR_TYPE = 254
 
 const HELLO_TYPE = 0
@@ -38,7 +44,7 @@ const NO_DATUM_TYPE = 131
 
 var waitingResponses []WaitingResponse
 var openSessions []OpenSession
-var sessionsWeOpened []OpenSession
+var sessionsWeOpened []SessionWeOpened
 var mutex sync.Mutex
 
 func CreateHttpClient() *http.Client {
@@ -135,12 +141,12 @@ func UdpRead(conn net.PacketConn) {
 
 				// In addition to sessions opened by other peers, we also store sessions we opened
 				if buf[TYPE_BYTE] == 128 {
-					i = sliceContainsSession(sessionsWeOpened, udpAddress.String())
+					i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
 					if i != -1 {
-						openSessions[i].LastDatagramTime = time.Now()
+						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						openSession := OpenSession{FullAddress: *udpAddress, LastDatagramTime: time.Now()}
-						sessionsWeOpened = append(sessionsWeOpened, openSession)
+						sessionWeOpened := SessionWeOpened{FullAddress: *udpAddress, LastDatagramTime: time.Now(), merkleTree: nil}
+						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
 				}
 
@@ -178,19 +184,30 @@ func UdpRead(conn net.PacketConn) {
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil)
 			openSession := OpenSession{FullAddress: *udpAddress, LastDatagramTime: time.Now()}
 			openSessions = append(openSessions, openSession)
+
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
+
 		case byte(GET_DATUM_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), NO_DATUM_TYPE, udpAddress, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+GET_DATUM_BODY_LENGTH])
+
+		case ROOT_TYPE:
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+			if i != -1 {
+				if sessionsWeOpened[i].merkleTree == nil {
+					sessionsWeOpened[i].merkleTree = CreateTree([]([]byte){buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+ROOT_BODY_LENGTH]}, 32)
+				}
+			}
 		}
 	}
 }
 
-func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr, data []byte) {
+func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr, data []byte) bool {
 	var datagram []byte
 	var responseOptions []int
 	var responseReceived bool
 	var waitingResponse WaitingResponse
+	writingSuccessful := true
 
 	switch datagramType {
 	case HELLO_TYPE:
@@ -211,7 +228,7 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 	case ERROR_TYPE:
 		datagram = ErrorDatagram(datagramId, data)
 	default:
-		return
+		return false
 	}
 
 	waitForResponse := len(responseOptions) != 0
@@ -258,6 +275,7 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 			} else {
 				if i == 3 && DEBUG_MODE {
 					log.Printf("AFTER %d ATTEMPTS, THERE IS NO ANSWER FROM %s TO DATAGRAM OF TYPE %d \n", i+1, address.String(), datagramType)
+					writingSuccessful = false
 				}
 			}
 			mutex.Unlock()
@@ -265,6 +283,8 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 			responseReceived = true
 		}
 	}
+
+	return writingSuccessful
 
 }
 
@@ -281,9 +301,30 @@ func sliceContainsSession(slice []OpenSession, address string) int {
 	for i, element := range slice {
 		if element.FullAddress.String() == address {
 			// After an hour the session is no longer valid and in that case we remove it
-			if time.Since(element.LastDatagramTime).Minutes() > 60 {
+			if time.Since(element.LastDatagramTime).Minutes() > 55 {
 				openSessions = append(openSessions[:i], openSessions[i+1:]...)
 				return -1
+			} else {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn net.PacketConn) int {
+	for i, element := range slice {
+		if element.FullAddress.String() == address {
+			// After an hour the session is no longer valid
+			if time.Since(element.LastDatagramTime).Minutes() > 55 {
+				// We resend a Hello message, if we receive HelloReplay as a response
+				// (the write function will return true), we succeed in renewing the session
+				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, &element.FullAddress, nil) {
+					return i
+				} else {
+					sessionsWeOpened = append(sessionsWeOpened[:i], sessionsWeOpened[i+1:]...) // We remove the session
+					return -1
+				}
 			} else {
 				return i
 			}
