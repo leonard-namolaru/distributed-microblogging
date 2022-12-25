@@ -170,26 +170,15 @@ func main() {
 		}
 	}
 
-	/* STEP 8 : ROOT REQUEST TO ALL PEER ADDRESSES
+	/* STEP 8 : ROOT REQUEST TO ALL THE SESSIONS WE OPENED
 	 */
-	for _, peer := range peers {
-		if peer.Username == "jch" || peer.Username == "bet" {
-			for _, address := range peer.Adresses {
-				var full_address string
-
-				if net.ParseIP(address.Ip).To4() == nil {
-					full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
-
-				} else {
-					full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
-				}
-				serverAddr, err := net.ResolveUDPAddr("udp", full_address)
-				if err != nil {
-					panic(err)
-				}
-
-				UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, serverAddr, nil)
+	for _, session := range sessionsWeOpened {
+		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
+		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.IP.String() != serverUdpAddresses[1].Ip {
+			if session.FullAddress.Port != int(serverUdpAddresses[0].Port) && session.FullAddress.Port != int(serverUdpAddresses[1].Port) {
+				UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
 			}
+
 		}
 	}
 

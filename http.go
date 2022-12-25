@@ -38,6 +38,7 @@ const NO_DATUM_TYPE = 131
 
 var waitingResponses []WaitingResponse
 var openSessions []OpenSession
+var sessionsWeOpened []OpenSession
 var mutex sync.Mutex
 
 func CreateHttpClient() *http.Client {
@@ -131,13 +132,25 @@ func UdpRead(conn net.PacketConn) {
 
 			if sliceContainsInt(waitingResponses[i].DatagramTypes, int(datagramType)) != -1 {
 				waitingResponses = append(waitingResponses[:i], waitingResponses[i+1:]...)
+
+				// In addition to sessions opened by other peers, we also store sessions we opened
+				if buf[TYPE_BYTE] == 128 {
+					i = sliceContainsSession(sessionsWeOpened, udpAddress.String())
+					if i != -1 {
+						openSessions[i].LastDatagramTime = time.Now()
+					} else {
+						openSession := OpenSession{FullAddress: *udpAddress, LastDatagramTime: time.Now()}
+						sessionsWeOpened = append(sessionsWeOpened, openSession)
+					}
+				}
+
 			} else { // We are waiting for a datagram from this address but not a datagram with the received datagram type
-				if buf[TYPE_BYTE] > 128 { // If we receive a response type datagram
+				if buf[TYPE_BYTE] >= 128 { // If we receive a response type datagram
 					nonSolicitMessage = true
 				}
 			}
 		} else { // If we are not waiting for a message from this peer
-			if buf[TYPE_BYTE] > 128 { // If we receive a response type datagram
+			if buf[TYPE_BYTE] >= 128 { // If we receive a response type datagram
 				nonSolicitMessage = true
 			}
 		}
@@ -150,7 +163,9 @@ func UdpRead(conn net.PacketConn) {
 
 		i = sliceContainsSession(openSessions, udpAddress.String())
 		if i != -1 {
-			openSessions[i].LastDatagramTime = time.Now()
+			if buf[TYPE_BYTE] == 0 {
+				openSessions[i].LastDatagramTime = time.Now()
+			}
 		} else { // If there is no open session
 			if int(buf[TYPE_BYTE]) != HELLO_TYPE && int(buf[TYPE_BYTE]) <= 127 {
 				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("No handshake was performed (Hello, HelloReplay) or more than an hour has passed since the last interaction"))
