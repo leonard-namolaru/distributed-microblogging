@@ -165,7 +165,7 @@ func main() {
 					panic(err)
 				}
 
-				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
+				go UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
 			}
 		}
 	}
@@ -188,7 +188,7 @@ func main() {
 					panic(err)
 				}
 
-				UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, serverAddr, nil)
+				go UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, serverAddr, nil)
 			}
 		}
 	}
@@ -203,8 +203,6 @@ func main() {
 
 	UdpWrite(conn, datagram_id, GET_DATUM_TYPE, serverAddr, []byte{80, 118, 133, 10, 109, 125, 229, 201, 82, 105, 128, 65, 40, 17, 68, 247, 5, 223, 18, 113, 2, 67, 177, 164, 28, 236, 120, 121, 129, 106, 44, 144})
 
-	fmt.Println()
-	log.Printf("WAITING FOR NEW MESSAGES... \n")
 	for {
 	}
 

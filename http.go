@@ -113,9 +113,7 @@ func UdpRead(conn net.PacketConn) {
 		}
 
 		if DEBUG_MODE {
-			fmt.Println()
-			log.Printf("WE RECEIVE A DATAGRAM FROM %s : \n", address)
-			PrintDatagram(false, address.String(), buf)
+			PrintDatagram(false, address.String(), buf, 0)
 		}
 
 		udpAddress, err := net.ResolveUDPAddr("udp", address.String())
@@ -158,7 +156,6 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		responseOptions = append(responseOptions, HELLO_REPLAY_TYPE)
 	case HELLO_REPLAY_TYPE:
 		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
-		responseOptions = append(responseOptions, HELLO_REPLAY_TYPE)
 	case ROOT_REQUEST_TYPE:
 		datagram = RootRequestDatagram(datagramId)
 		responseOptions = append(responseOptions, ROOT_TYPE)
@@ -168,26 +165,35 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		datagram = GetDatumDatagram(datagramId, data)
 		responseOptions = append(responseOptions, NO_DATUM_TYPE, DATUM_TYPE)
 	case NO_DATUM_TYPE:
-		datagram = GetDatumDatagram(datagramId, data)
+		datagram = NoDatumDatagram(datagramId, data)
 	default:
 		return
 	}
 
-	if len(responseOptions) != 0 {
+	waitForResponse := len(responseOptions) != 0
+	if waitForResponse {
 		mutex.Lock()
 		waitingResponse = WaitingResponse{FullAddress: *address, DatagramTypes: responseOptions}
 		waitingResponses = append(waitingResponses, waitingResponse)
 		mutex.Unlock()
-		responseReceived = false
-	} else {
-		responseReceived = true
 	}
 
+	responseReceived = false
 	for i := 0; !responseReceived && i < 4; i++ {
+		// Exponential growth (Croissance exponentielle)
+		// Formula : f(x)=a(1+r)^{x}
+		// a    =   initial amount
+		// r	=	growth rate
+		// {x}	=	number of time intervals
+		// Source : Google ("Exponential growth Formula")
+		r := 1
+		timeOut := 0.0
+		if waitForResponse {
+			timeOut = 2 * math.Pow(float64(1+r), float64(i))
+		}
+
 		if DEBUG_MODE {
-			fmt.Println()
-			log.Printf("WE SEND A DATAGRAM TO : %s \n", address)
-			PrintDatagram(true, address.String(), datagram)
+			PrintDatagram(true, address.String(), datagram, timeOut)
 		}
 
 		_, err := conn.WriteTo(datagram, address)
@@ -195,25 +201,19 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 			log.Fatal("The method WriteTo failed in udpWrite() to %s : %v", address.String(), err)
 		}
 
-		if len(responseOptions) != 0 {
-			// Exponential growth (Croissance exponentielle)
-			// Formula : f(x)=a(1+r)^{x}
-			// a    =   initial amount
-			// r	=	growth rate
-			// {x}	=	number of time intervals
-			// Source : Google ("Exponential growth Formula")
-			r := 1
-			timeOut := 2 * math.Pow(float64(1+r), float64(i))
-			if DEBUG_MODE {
-				log.Printf("TIMEOUT AFTER %.2f SEC \n", timeOut)
-			}
-
+		if waitForResponse {
 			time.Sleep(time.Duration(timeOut * float64(time.Second)))
 			mutex.Lock()
 			if sliceContainsAddress(waitingResponses, waitingResponse.FullAddress.String()) == -1 {
 				responseReceived = true
+			} else {
+				if i == 3 && DEBUG_MODE {
+					log.Printf("AFTER %d ATTEMPTS, THERE IS NO ANSWER FROM %s TO DATAGRAM OF TYPE %d \n", i+1, address.String(), datagramType)
+				}
 			}
 			mutex.Unlock()
+		} else {
+			responseReceived = true
 		}
 	}
 

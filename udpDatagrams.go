@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"fmt"
+	"log"
 )
 
 const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
@@ -47,7 +48,7 @@ func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyL
 	return datagram
 }
 
-func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte) {
+func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeOut float64) {
 	var str string
 	str = ""
 
@@ -55,11 +56,11 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte) {
 	id := datagram[ID_FIRST_BYTE : ID_FIRST_BYTE+ID_LENGTH]
 	datagramType := datagram[TYPE_BYTE]
 
-	//if !isDatagramWeSent {
-	//	str += fmt.Sprintf("THE UDP DATAGRAM (from %s) :\n", address)
-	//} else {
-	//	str += fmt.Sprintf("THE UDP DATAGRAM (to : %s) :\n", address)
-	//}
+	if !isDatagramWeSent {
+		str += fmt.Sprintf("WE RECEIVE A DATAGRAM FROM %s :\n", address)
+	} else {
+		str += fmt.Sprintf("WE SEND A DATAGRAM TO : %s :\n", address)
+	}
 
 	str += fmt.Sprintf("THE DATAGRAM AS BYTES : %v \n", datagram[:(DATAGRAM_MIN_LENGTH+bodyLength+SIGNATURE_LENGTH)])
 	str += fmt.Sprintf("ID : %v TYPE : %d LENGTH : %d  \n", id, datagramType, bodyLength)
@@ -91,7 +92,12 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte) {
 		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
 	}
 
-	fmt.Print(str)
+	if timeOut > 0 {
+		str += fmt.Sprintf("TIMEOUT AFTER %.2f SEC \n", timeOut)
+	}
+
+	fmt.Println()
+	log.Print(str)
 }
 
 /********************************************** MERKEL TREE **********************************************/
