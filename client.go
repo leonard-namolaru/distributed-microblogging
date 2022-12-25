@@ -150,7 +150,7 @@ func main() {
 	/* STEP 7 : HELLO TO ALL PEER ADDRESSES
 	 */
 	for _, peer := range peers {
-		if peer.Username != NAME_FOR_SERVER_REGISTRATION {
+		if peer.Username == "jch" || peer.Username == "bet" {
 			for _, address := range peer.Adresses {
 				var full_address string
 
@@ -165,7 +165,7 @@ func main() {
 					panic(err)
 				}
 
-				go UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
+				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
 			}
 		}
 	}
@@ -173,7 +173,7 @@ func main() {
 	/* STEP 8 : ROOT REQUEST TO ALL PEER ADDRESSES
 	 */
 	for _, peer := range peers {
-		if peer.Username != NAME_FOR_SERVER_REGISTRATION {
+		if peer.Username == "jch" || peer.Username == "bet" {
 			for _, address := range peer.Adresses {
 				var full_address string
 
@@ -188,7 +188,7 @@ func main() {
 					panic(err)
 				}
 
-				go UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, serverAddr, nil)
+				UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, serverAddr, nil)
 			}
 		}
 	}

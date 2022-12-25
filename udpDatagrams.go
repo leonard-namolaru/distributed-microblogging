@@ -197,3 +197,13 @@ func NoDatumDatagram(id string, hash []byte) []byte {
 	copy(datagram[BODY_FIRST_BYTE:], hash)
 	return datagram
 }
+
+/********************************************** ERROR **********************************************/
+func ErrorDatagram(id string, errorMessage []byte) []byte {
+	datagramBodyLength := len(errorMessage)
+	datagramLength := DATAGRAM_MIN_LENGTH + datagramBodyLength + SIGNATURE_LENGTH
+	datagram := datagramGeneralStructure([]byte(id), ERROR_TYPE, datagramBodyLength, datagramLength)
+
+	copy(datagram[BODY_FIRST_BYTE:], errorMessage)
+	return datagram
+}

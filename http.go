@@ -37,6 +37,7 @@ const DATUM_TYPE = 130
 const NO_DATUM_TYPE = 131
 
 var waitingResponses []WaitingResponse
+var openSessions []OpenSession
 var mutex sync.Mutex
 
 func CreateHttpClient() *http.Client {
@@ -116,6 +117,7 @@ func UdpRead(conn net.PacketConn) {
 			PrintDatagram(false, address.String(), buf, 0)
 		}
 
+		nonSolicitMessage := false
 		udpAddress, err := net.ResolveUDPAddr("udp", address.String())
 		if err != nil {
 			log.Fatal("The method net.ResolveUDPAddr() failed in udpRead() during the resolve of the address %s : %v \n", address.String(), err)
@@ -129,13 +131,38 @@ func UdpRead(conn net.PacketConn) {
 
 			if sliceContainsInt(waitingResponses[i].DatagramTypes, int(datagramType)) != -1 {
 				waitingResponses = append(waitingResponses[:i], waitingResponses[i+1:]...)
+			} else { // We are waiting for a datagram from this address but not a datagram with the received datagram type
+				if buf[TYPE_BYTE] > 128 { // If we receive a response type datagram
+					nonSolicitMessage = true
+				}
+			}
+		} else { // If we are not waiting for a message from this peer
+			if buf[TYPE_BYTE] > 128 { // If we receive a response type datagram
+				nonSolicitMessage = true
 			}
 		}
 		mutex.Unlock()
 
+		if nonSolicitMessage && buf[TYPE_BYTE] != ERROR_TYPE {
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("A response type datagram was received even though we did not request such a response"))
+			continue
+		}
+
+		i = sliceContainsSession(openSessions, udpAddress.String())
+		if i != -1 {
+			openSessions[i].LastDatagramTime = time.Now()
+		} else { // If there is no open session
+			if int(buf[TYPE_BYTE]) != HELLO_TYPE && int(buf[TYPE_BYTE]) <= 127 {
+				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("No handshake was performed (Hello, HelloReplay) or more than an hour has passed since the last interaction"))
+				continue
+			}
+		}
+
 		switch buf[TYPE_BYTE] {
-		case byte(HELLO_TYPE):
+		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil)
+			openSession := OpenSession{FullAddress: *udpAddress, LastDatagramTime: time.Now()}
+			openSessions = append(openSessions, openSession)
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
 		case byte(GET_DATUM_TYPE):
@@ -166,6 +193,8 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		responseOptions = append(responseOptions, NO_DATUM_TYPE, DATUM_TYPE)
 	case NO_DATUM_TYPE:
 		datagram = NoDatumDatagram(datagramId, data)
+	case ERROR_TYPE:
+		datagram = ErrorDatagram(datagramId, data)
 	default:
 		return
 	}
@@ -173,8 +202,13 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 	waitForResponse := len(responseOptions) != 0
 	if waitForResponse {
 		mutex.Lock()
-		waitingResponse = WaitingResponse{FullAddress: *address, DatagramTypes: responseOptions}
-		waitingResponses = append(waitingResponses, waitingResponse)
+		i := sliceContainsAddress(waitingResponses, address.String())
+		if i == -1 {
+			waitingResponse = WaitingResponse{FullAddress: *address, DatagramTypes: responseOptions}
+			waitingResponses = append(waitingResponses, waitingResponse)
+		} else {
+			waitingResponses[i].DatagramTypes = append(waitingResponses[i].DatagramTypes, responseOptions...)
+		}
 		mutex.Unlock()
 	}
 
@@ -223,6 +257,21 @@ func sliceContainsAddress(slice []WaitingResponse, address string) int {
 	for i, element := range slice {
 		if element.FullAddress.String() == address {
 			return i
+		}
+	}
+	return -1
+}
+
+func sliceContainsSession(slice []OpenSession, address string) int {
+	for i, element := range slice {
+		if element.FullAddress.String() == address {
+			// After an hour the session is no longer valid and in that case we remove it
+			if time.Since(element.LastDatagramTime).Minutes() > 60 {
+				openSessions = append(openSessions[:i], openSessions[i+1:]...)
+				return -1
+			} else {
+				return i
+			}
 		}
 	}
 	return -1
