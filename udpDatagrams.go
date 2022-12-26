@@ -29,7 +29,7 @@ const ID_LENGTH = 4
 const ID_FIRST_BYTE = 0
 
 const TYPE_BYTE = 4
-
+const LENGTH_FIRST_BYTE = 5
 const BODY_FIRST_BYTE = 7
 
 const FLAGS_FIRST_BYTE = 7
@@ -203,9 +203,9 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeO
 
 func datumDatagramToString(datumDatagramBody []byte) string {
 	var str string
-	Hash := datumDatagramBody[0:HASH_LENGTH]
+	hash := datumDatagramBody[0:HASH_LENGTH]
 
-	str = fmt.Sprintf("Node hash : %x \n", Hash)
+	str = fmt.Sprintf("Node hash : %x \n", hash)
 	str += nodeDataToString(datumDatagramBody[HASH_LENGTH:], 0)
 	return str
 }

@@ -292,7 +292,7 @@ func nodeDataToString(nodeData []byte, tabulationNum int) string {
 		}
 		str += fmt.Sprintf("Body :  %s \n", messageBody)
 
-	} else {
+	} else if nodeType == 1 {
 		str += fmt.Sprintf("Node type :  %d \n", nodeType)
 		hashCount := 0
 		for i := NODE_TYPE_BYTE + 1; i < len(nodeData); i += HASH_LENGTH {

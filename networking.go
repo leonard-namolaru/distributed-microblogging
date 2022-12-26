@@ -28,7 +28,7 @@ type SessionWeOpened struct {
 	FullAddress      *net.UDPAddr
 	LastDatagramTime time.Time
 	Merkle           *MerkleTree
-	RootHash         []byte
+	buffer           [][]byte
 }
 
 const ERROR_TYPE = 254
@@ -115,7 +115,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 func UdpRead(conn net.PacketConn) {
 
 	for {
-		buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES)
+		buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES+500)
 
 		_, address, err := conn.ReadFrom(buf)
 		if err != nil {
@@ -147,7 +147,7 @@ func UdpRead(conn net.PacketConn) {
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := &SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil, RootHash: nil}
+						sessionWeOpened := &SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil}
 						sessionsWeOpened = append(sessionsWeOpened, *sessionWeOpened)
 					}
 				}
@@ -195,8 +195,25 @@ func UdpRead(conn net.PacketConn) {
 		case byte(ROOT_TYPE):
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
 			if i != -1 {
-				sessionsWeOpened[i].RootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+ROOT_BODY_LENGTH]
+				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+ROOT_BODY_LENGTH])
 			}
+
+		case byte(DATUM_TYPE):
+			bodyLength := int(buf[LENGTH_FIRST_BYTE]) + int(buf[LENGTH_FIRST_BYTE+1])
+
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+			if i != -1 {
+				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+			}
+
+		case byte(NO_DATUM_TYPE):
+			bodyLength := int(buf[LENGTH_FIRST_BYTE]) + int(buf[LENGTH_FIRST_BYTE+1])
+
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+			if i != -1 {
+				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+			}
+
 		}
 	}
 }

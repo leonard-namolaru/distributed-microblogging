@@ -191,10 +191,28 @@ func main() {
 
 	/* STEP 9 : USING THE HASH OF THE ROOT IN ORDER TO OBTAIN THE INFORMATION THAT THE HASH REPRESENTS
 	 */
-	for _, session := range sessionsWeOpened {
-		if session.RootHash != nil {
-			UdpWrite(conn, datagram_id, GET_DATUM_TYPE, session.FullAddress, session.RootHash)
+	for i := 0; i < len(sessionsWeOpened); i++ {
+		if len(sessionsWeOpened[i].buffer) != 0 {
+			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0])
+			if writeResult {
+
+				getDatumResult := getDatum(conn, i, datagram_id)
+				if getDatumResult || true {
+					var messages [][]byte
+
+					for j := 1; j < len(sessionsWeOpened[i].buffer); j++ {
+
+						if int(sessionsWeOpened[i].buffer[j][HASH_LENGTH+NODE_TYPE_BYTE]) == 0 {
+							messages = append(messages, sessionsWeOpened[i].buffer[j][HASH_LENGTH:])
+						}
+					}
+
+					sessionsWeOpened[i].Merkle = CreateTree(messages, MERKLE_TREE_MAX_ARITY)
+					sessionsWeOpened[i].Merkle.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
+				}
+			}
 		}
+
 	}
 
 	fmt.Println()
@@ -203,6 +221,46 @@ func main() {
 	for {
 	}
 
+}
+
+func checkHash(hash []byte, data []byte) bool {
+	return true
+}
+
+func getDatum(conn net.PacketConn, sessionIndex int, datagramId string) bool {
+	bufferIndex := len(sessionsWeOpened[sessionIndex].buffer) - 1
+	datagramBody := sessionsWeOpened[sessionIndex].buffer[bufferIndex]
+	hash := datagramBody[0:HASH_LENGTH]
+
+	if HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE < len(datagramBody) {
+		messageLength := int(datagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE]) + int(datagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE+1])
+		messageBody := datagramBody[HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE:]
+		if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == 0 || messageLength == len(messageBody) {
+			return true
+		}
+	}
+
+	if len(datagramBody) == HASH_LENGTH {
+		sessionsWeOpened[sessionIndex].buffer = append(sessionsWeOpened[sessionIndex].buffer[:bufferIndex], sessionsWeOpened[sessionIndex].buffer[bufferIndex+1:]...) // We remove the session
+		return false
+	}
+
+	if !checkHash(hash, datagramBody[HASH_LENGTH:]) {
+		return false
+	}
+
+	for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
+		hashI := datagramBody[i : i+HASH_LENGTH]
+
+		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI)
+		if writeResult {
+			getDatum(conn, sessionIndex, datagramId)
+		} else {
+			return false
+		}
+	}
+
+	return true
 }
 
 func CreateRandId() []byte {
