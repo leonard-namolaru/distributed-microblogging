@@ -263,7 +263,7 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 
 		_, err := conn.WriteTo(datagram, address)
 		if err != nil {
-			log.Fatal("The method WriteTo failed in udpWrite() to %s : %v", address.String(), err)
+			log.Fatalf("The method WriteTo failed in udpWrite() to %s : %v", address.String(), err)
 		}
 
 		if waitForResponse {

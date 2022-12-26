@@ -68,34 +68,45 @@ func (merkleTree *MerkleTree) createLeafNodes(messages [][]byte) []*MerkleNode {
 func (merkleTree *MerkleTree) createNodes(leafNodes []*MerkleNode) *MerkleNode {
 	var merkleNodes []*MerkleNode
 
+	// Particular case: if we have a tree that includes only one element, this element will be the root of the tree
+	if len(leafNodes) == 1 {
+		return leafNodes[0]
+	}
+
 	// We go through the list of leaves
 	for i := 0; i < len(leafNodes); i += merkleTree.MaxArity {
 		var hashesConcatenation []byte
 		var children []*MerkleNode
 
-		hash := sha256.New()
-		merkleNode := &MerkleNode{}
-		for j := i; j < len(leafNodes) && (j-i) < merkleTree.MaxArity; j++ {
-			// Each internal node is a concatenation of byte strings of the hashes of its children
-			hashesConcatenation = append(hashesConcatenation, leafNodes[j].Hash...)
-			children = append(children, leafNodes[j])
-			leafNodes[j].ParentNode = merkleNode
-		}
+		// If we see that we have only one element left in the list, we want to create a direct link with the element above it,
+		// without creating an element in the bins, so we add this single element directly to the list that the function returns
+		if len(leafNodes[i:]) == 1 {
+			merkleNodes = append(merkleNodes, leafNodes[i])
+		} else {
+			hash := sha256.New()
+			merkleNode := &MerkleNode{}
+			for j := i; j < len(leafNodes) && (j-i) < merkleTree.MaxArity; j++ {
+				// Each internal node is a concatenation of byte strings of the hashes of its children
+				hashesConcatenation = append(hashesConcatenation, leafNodes[j].Hash...)
+				children = append(children, leafNodes[j])
+				leafNodes[j].ParentNode = merkleNode
+			}
 
-		hashesConcatenation = append([]byte{NODE_TYPE_INTERNAL}, hashesConcatenation...)
-		_, errorMessage := hash.Write(hashesConcatenation)
-		if errorMessage != nil {
-			log.Fatal("Error : unable to generate a hash for hashes concatenation \n")
-		}
+			hashesConcatenation = append([]byte{NODE_TYPE_INTERNAL}, hashesConcatenation...)
+			_, errorMessage := hash.Write(hashesConcatenation)
+			if errorMessage != nil {
+				log.Fatal("Error : unable to generate a hash for hashes concatenation \n")
+			}
 
-		merkleNode.Children = children
-		merkleNode.Hash = hash.Sum(nil)
-		merkleNode.Data = hashesConcatenation
-		merkleNode.IsLeaf = false
-		merkleNodes = append(merkleNodes, merkleNode)
+			merkleNode.Children = children
+			merkleNode.Hash = hash.Sum(nil)
+			merkleNode.Data = hashesConcatenation
+			merkleNode.IsLeaf = false
+			merkleNodes = append(merkleNodes, merkleNode)
 
-		if len(leafNodes) <= merkleTree.MaxArity {
-			return merkleNode
+			if len(leafNodes) <= merkleTree.MaxArity {
+				return merkleNode
+			}
 		}
 
 	}
@@ -172,12 +183,17 @@ func (merkleTree *MerkleTree) PrintTest(counter int, merkleNode *MerkleNode) {
 func main() { // For testing purposes only
 	var merkleTree *MerkleTree
 
-	datagram1 := []byte("test")
-	datagram2 := []byte("test2")
-	datagram3 := []byte("XV")
-	datagram4 := []byte("tt")
+	message1 := []byte("1")
+	message2 := []byte("2")
+	message3 := []byte("3")
+	message4 := []byte("4")
+	message5 := []byte("5")
+	message6 := []byte("6")
+	message7 := []byte("7")
+	message8 := []byte("8")
+	message9 := []byte("9")
 
-	udpDatagrams := []([]byte){datagram1, datagram2, datagram3, datagram4}
+	udpDatagrams := []([]byte){message1, message2, message3, message4, message5, message6, message7, message8, message9}
 
 	merkleTree = CreateTree(udpDatagrams, 2)
 	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)

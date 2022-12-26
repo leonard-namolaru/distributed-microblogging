@@ -179,7 +179,7 @@ func main() {
 	/* STEP 7 : HELLO TO (ALL) PEER ADDRESSES
 	 */
 	for _, peer := range peers {
-		if peer.Username == "jch" || peer.Username == "bet" {
+		if peer.Username != NAME_FOR_SERVER_REGISTRATION {
 			for _, address := range peer.Adresses {
 				var full_address string
 
