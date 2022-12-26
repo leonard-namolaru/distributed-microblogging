@@ -67,6 +67,7 @@ func main() {
 	thisPeerMerkleTree := CreateTree(messages, MERKLE_TREE_MAX_ARITY)
 	thisPeerMerkleTree.DepthFirstSearch(0, thisPeerMerkleTree.PrintTest)
 	thisPeerMerkleTree.DepthFirstSearch(0, thisPeerMerkleTree.PrintNumberChildren)
+	thisPeerMerkleTree.DepthFirstSearch(0, thisPeerMerkleTree.PrintNodesData)
 
 	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
 	 *  HTTP GET to /udp-address followed by a JSON decode.

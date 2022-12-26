@@ -63,36 +63,6 @@ func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyL
 	return datagram
 }
 
-/********************************************** MERKEL TREE **********************************************/
-func CreateMessage(body string, inReplyTo []byte) []byte {
-	timeSinceJanuary := fmt.Sprintf("%.d", int(time.Since(JANUARY_1_2022).Seconds()))
-
-	messageBodyLength := len(body)
-	datagramLength := MESSAGE_TOTAL_MIN_LENGTH + messageBodyLength
-	datagram := make([]byte, datagramLength)
-
-	datagram[NODE_TYPE_BYTE] = 0 // Type 0 indicates that it is a message
-	copy(datagram[MESSAGE_DATE_FIRST_BYTE:MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH], []byte(timeSinceJanuary))
-	copy(datagram[MESSAGE_IN_REPLY_TO_FIRST_BYTE:MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH], inReplyTo)
-	datagram[MESSAFE_LENGTH_FIRST_BYTE] = byte(messageBodyLength >> 8)
-	datagram[MESSAFE_LENGTH_FIRST_BYTE+1] = byte(messageBodyLength & 0xFF)
-
-	copy(datagram[MESSAGE_BODY_FIRST_BYTE:], []byte(body))
-	return datagram
-}
-
-// In-reply-to indicates the hash of the message to which a message replies.
-// It is 0 if a message does not respond to another message. Field size : 32 bytes.
-func inReplyToZeroes() []byte {
-	inReplyTo := make([]byte, MESSAFE_IN_REPLY_TO_LENGTH)
-
-	for i := 0; i < len(inReplyTo); i++ {
-		inReplyTo[i] = 0
-	}
-
-	return inReplyTo
-}
-
 /********************************************** HELLO, HELLO_REPLY **********************************************/
 func HelloDatagram(id string, userName string) []byte {
 	usernameLength := len(userName)
@@ -195,18 +165,14 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeO
 		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
 		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
 			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
-
 	case byte(ROOT_TYPE):
 		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
 	case byte(ERROR_TYPE):
 		str += fmt.Sprintf("BODY : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
 	case byte(DATUM_TYPE):
-		str += fmt.Sprintf("BODY : %s ", datumDatagramToString(datagram[BODY_FIRST_BYTE:]))
+		str += fmt.Sprintf("BODY : %s ", datumDatagramToString(datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength]))
 	case byte(GET_DATUM_TYPE):
 		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
 	case byte(NO_DATUM_TYPE):
 		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
 	}
@@ -220,19 +186,10 @@ func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeO
 }
 
 func datumDatagramToString(datumDatagramBody []byte) string {
+	var str string
 	Hash := datumDatagramBody[0:HASH_LENGTH]
-	nodeType := datumDatagramBody[HASH_LENGTH+NODE_TYPE_BYTE]
 
-	if nodeType == 0 { // Type 0 indicates that it is a message
-		messageDate := datumDatagramBody[HASH_LENGTH+MESSAGE_DATE_FIRST_BYTE : HASH_LENGTH+MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH]
-		messageInReplyTo := datumDatagramBody[HASH_LENGTH+MESSAGE_IN_REPLY_TO_FIRST_BYTE : HASH_LENGTH+MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH]
-		messageLength := int(datumDatagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE]) + int(datumDatagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE+1])
-		messageBody := datumDatagramBody[HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE:]
-
-		messageDateSec := int(messageDate[0]) + int(messageDate[1]) + int(messageDate[2]) + int(messageDate[3])
-		messageDateTime := JANUARY_1_2022.Add(time.Duration(messageDateSec) * time.Second).String()
-		return fmt.Sprintf("Node hash : %x , Node type :  %d, Date : %s, In reply to : %x, Length : %d, Body : %s \n", Hash, nodeType, messageDateTime, messageInReplyTo, messageLength, messageBody)
-	}
-
-	return ""
+	str = fmt.Sprintf("Node hash : %x \n", Hash)
+	str += nodeDataToString(datumDatagramBody[HASH_LENGTH:], 0)
+	return str
 }

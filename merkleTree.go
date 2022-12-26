@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log"
+	"time"
 )
 
 const NODE_TYPE_INTERNAL = 1
@@ -168,6 +169,18 @@ func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *Merkl
 	fmt.Printf("Number of children : %d \n", len(merkleNode.Children))
 }
 
+func (merkleTree *MerkleTree) PrintNodesData(counter int, merkleNode *MerkleNode) {
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+	fmt.Printf("Node hash : %x \n", merkleNode.Hash)
+
+	for i := 0; i < counter; i++ {
+		fmt.Printf("\t")
+	}
+	fmt.Printf("Node data : %s \n", nodeDataToString(merkleNode.Data, counter))
+}
+
 func (merkleTree *MerkleTree) PrintTest(counter int, merkleNode *MerkleNode) {
 	for i := 0; i < counter; i++ {
 		fmt.Printf("\t")
@@ -177,6 +190,89 @@ func (merkleTree *MerkleTree) PrintTest(counter int, merkleNode *MerkleNode) {
 	} else {
 		fmt.Printf("Node data : %x \n", merkleNode.Data)
 	}
+}
+
+/******************************************************************************************/
+func CreateMessage(body string, inReplyTo []byte) []byte {
+	timeSinceJanuary := fmt.Sprintf("%d", int(time.Since(JANUARY_1_2022).Seconds()))
+
+	messageBodyLength := len(body)
+	messageLength := MESSAGE_TOTAL_MIN_LENGTH + messageBodyLength
+	message := make([]byte, messageLength)
+
+	message[NODE_TYPE_BYTE] = 0 // Type 0 indicates that it is a message
+	copy(message[MESSAGE_DATE_FIRST_BYTE:MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH], []byte(timeSinceJanuary))
+	copy(message[MESSAGE_IN_REPLY_TO_FIRST_BYTE:MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH], inReplyTo)
+	message[MESSAFE_LENGTH_FIRST_BYTE] = byte(messageBodyLength >> 8)
+	message[MESSAFE_LENGTH_FIRST_BYTE+1] = byte(messageBodyLength & 0xFF)
+
+	copy(message[MESSAGE_BODY_FIRST_BYTE:], []byte(body))
+	return message
+}
+
+func nodeDataToString(nodeData []byte, tabulationNum int) string {
+	str := ""
+	nodeType := nodeData[NODE_TYPE_BYTE]
+
+	if nodeType == 0 { // Type 0 indicates that it is a message
+		messageDate := nodeData[MESSAGE_DATE_FIRST_BYTE : MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH]
+		messageInReplyTo := nodeData[MESSAGE_IN_REPLY_TO_FIRST_BYTE : MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH]
+		messageLength := int(nodeData[MESSAFE_LENGTH_FIRST_BYTE]) + int(nodeData[MESSAFE_LENGTH_FIRST_BYTE+1])
+		messageBody := nodeData[MESSAGE_BODY_FIRST_BYTE:]
+
+		messageDateSec := int(messageDate[0]) + int(messageDate[1]) + int(messageDate[2]) + int(messageDate[3])
+		messageDateTime := JANUARY_1_2022.Add(time.Duration(messageDateSec) * time.Second).String()
+
+		for i := 0; i < tabulationNum; i++ {
+			str += fmt.Sprintf("\t")
+		}
+		str += fmt.Sprintf("Node type :  %d \n", nodeType)
+
+		for i := 0; i < tabulationNum; i++ {
+			str += fmt.Sprintf("\t")
+		}
+		str += fmt.Sprintf("Date :  %s \n", messageDateTime)
+
+		for i := 0; i < tabulationNum; i++ {
+			str += fmt.Sprintf("\t")
+		}
+		str += fmt.Sprintf("In reply to : %x \n", messageInReplyTo)
+
+		for i := 0; i < tabulationNum; i++ {
+			str += fmt.Sprintf("\t")
+		}
+		str += fmt.Sprintf("Length :  %d \n", messageLength)
+
+		for i := 0; i < tabulationNum; i++ {
+			str += fmt.Sprintf("\t")
+		}
+		str += fmt.Sprintf("Body :  %s \n", messageBody)
+
+	} else {
+		str += fmt.Sprintf("Node type :  %d \n", nodeType)
+		hashCount := 0
+		for i := NODE_TYPE_BYTE + 1; i < len(nodeData); i += HASH_LENGTH {
+			hashCount++
+			for i := 0; i < tabulationNum; i++ {
+				str += fmt.Sprintf("\t")
+			}
+			str += fmt.Sprintf("Hash %d : %x \n", hashCount, nodeData[i:i+HASH_LENGTH])
+		}
+	}
+
+	return str
+}
+
+// In-reply-to indicates the hash of the message to which a message replies.
+// It is 0 if a message does not respond to another message. Field size : 32 bytes.
+func inReplyToZeroes() []byte {
+	inReplyTo := make([]byte, MESSAFE_IN_REPLY_TO_LENGTH)
+
+	for i := 0; i < len(inReplyTo); i++ {
+		inReplyTo[i] = 0
+	}
+
+	return inReplyTo
 }
 
 /*
