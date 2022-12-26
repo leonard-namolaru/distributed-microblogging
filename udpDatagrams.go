@@ -23,6 +23,8 @@ const ROOT_REQUEST_BODY_LENGTH = 0
 const GET_DATUM_BODY_LENGTH = 32
 const NO_DATUM_BODY_LENGTH = 32
 
+const DATUM_VALUE_FIRST_BYTE = BODY_FIRST_BYTE + HASH_LENGTH
+
 const ID_LENGTH = 4
 const ID_FIRST_BYTE = 0
 
@@ -54,7 +56,6 @@ const MESSAGE_TOTAL_MIN_LENGTH = 1 + MESSAGE_DATE_LENGTH + MESSAFE_IN_REPLY_TO_L
 // General structure of a datagram
 func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyLength int, datagramLength int) []byte {
 	datagram := make([]byte, datagramLength)
-
 	copy(datagram[0:4], datagramId)
 	datagram[4] = byte(datagramType)
 	datagram[5] = byte(datagramBodyLength >> 8)
@@ -105,7 +106,7 @@ func RootDatagram(id string) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), ROOT_TYPE, ROOT_BODY_LENGTH, datagramLength)
 
-	copy(datagram[BODY_FIRST_BYTE:], thisPeerMerkleTree.Root.Hash)
+	copy(datagram[BODY_FIRST_BYTE:], ThisPeerMerkleTree.Root.Hash)
 	return datagram
 }
 
@@ -115,6 +116,21 @@ func GetDatumDatagram(id string, hash []byte) []byte {
 	datagram := datagramGeneralStructure([]byte(id), GET_DATUM_TYPE, GET_DATUM_BODY_LENGTH, datagramLength)
 
 	copy(datagram[BODY_FIRST_BYTE:], hash)
+	return datagram
+}
+
+func DatumDatagram(id string, hash []byte) []byte {
+	node := ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.GetNodeByHash, hash)
+	if node == nil {
+		return NoDatumDatagram(id, hash)
+	}
+
+	datagramBodyLength := HASH_LENGTH + len(node.Data)
+	datagramLength := DATAGRAM_MIN_LENGTH + datagramBodyLength + SIGNATURE_LENGTH
+	datagram := datagramGeneralStructure([]byte(id), DATUM_TYPE, datagramBodyLength, datagramLength)
+
+	copy(datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+HASH_LENGTH], node.Hash)
+	copy(datagram[DATUM_VALUE_FIRST_BYTE:], node.Data)
 	return datagram
 }
 
@@ -136,7 +152,7 @@ func ErrorDatagram(id string, errorMessage []byte) []byte {
 	return datagram
 }
 
-/*****************************************************************************************************/
+/******************************** DATAGRAM TO STRING / PRINT DATAGRAM **************************************/
 
 func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeOut float64) {
 	var str string

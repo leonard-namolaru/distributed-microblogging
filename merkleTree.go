@@ -117,7 +117,7 @@ func (merkleTree *MerkleTree) createNodes(leafNodes []*MerkleNode) *MerkleNode {
 
 /* Depth First Search (Prefix search)
  */
-func (merkleTree *MerkleTree) DepthFirstSearch(count int, function func(int, *MerkleNode), arg ...*MerkleNode) {
+func (merkleTree *MerkleTree) DepthFirstSearch(nodesHeightCountInitialization int, function func(int, *MerkleNode, []byte) bool, hashSearch []byte, arg ...*MerkleNode) *MerkleNode {
 	var merkleNode *MerkleNode // Node from which the search will start
 
 	if len(arg) == 0 {
@@ -126,63 +126,82 @@ func (merkleTree *MerkleTree) DepthFirstSearch(count int, function func(int, *Me
 		merkleNode = arg[0]
 	}
 
-	function(count, merkleNode)
+	funcResult := function(nodesHeightCountInitialization, merkleNode, hashSearch)
+	if funcResult == true {
+		return merkleNode
+	}
 
 	if merkleNode.IsLeaf {
-		return
+		return nil
 	}
 
 	for i := 0; i < len(merkleNode.Children); i++ {
-		merkleTree.DepthFirstSearch(count+1, function, merkleNode.Children[i])
+		merkleTree.DepthFirstSearch(nodesHeightCountInitialization+1, function, hashSearch, merkleNode.Children[i])
 	}
+
+	return nil
 }
 
-func (merkleTree *MerkleTree) PrintNodeHash(counter int, merkleNode *MerkleNode) {
-	for i := 0; i < counter; i++ {
+/******************************************************************************************/
+func (merkleTree *MerkleTree) GetNodeByHash(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	nodeHashString := fmt.Sprintf("%x", merkleNode.Hash)
+	hashSearchString := fmt.Sprintf("%x", hashSearch)
+	return (nodeHashString == hashSearchString)
+}
+
+func (merkleTree *MerkleTree) PrintNodeHash(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
 
 	fmt.Printf("Hash : %x \n", merkleNode.Hash)
+	return false
 }
 
-func (merkleTree *MerkleTree) PrintNodeData(counter int, merkleNode *MerkleNode) {
-	for i := 0; i < counter; i++ {
+func (merkleTree *MerkleTree) PrintNodeData(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
 
 	fmt.Printf("Data : %x \n", merkleNode.Data)
+	return false
 }
 
-func (merkleTree *MerkleTree) PrintNodeDataInBytes(counter int, merkleNode *MerkleNode) {
-	for i := 0; i < counter; i++ {
+func (merkleTree *MerkleTree) PrintNodeDataInBytes(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
 
 	fmt.Printf("Data : %v \n", merkleNode.Data)
+	return false
 }
 
-func (merkleTree *MerkleTree) PrintNumberChildren(counter int, merkleNode *MerkleNode) {
-	for i := 0; i < counter; i++ {
+func (merkleTree *MerkleTree) PrintNumberChildren(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
 
 	fmt.Printf("Number of children : %d \n", len(merkleNode.Children))
+
+	return false
 }
 
-func (merkleTree *MerkleTree) PrintNodesData(counter int, merkleNode *MerkleNode) {
-	for i := 0; i < counter; i++ {
+func (merkleTree *MerkleTree) PrintNodesData(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
 	fmt.Printf("Node hash : %x \n", merkleNode.Hash)
 
-	for i := 0; i < counter; i++ {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
-	fmt.Printf("Node data : %s \n", nodeDataToString(merkleNode.Data, counter))
+	fmt.Printf("Node data : %s \n", nodeDataToString(merkleNode.Data, nodeHeight))
+
+	return false
 }
 
-func (merkleTree *MerkleTree) PrintTest(counter int, merkleNode *MerkleNode) {
-	for i := 0; i < counter; i++ {
+func (merkleTree *MerkleTree) PrintTest(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
 	}
 	if merkleNode.IsLeaf {
@@ -190,6 +209,8 @@ func (merkleTree *MerkleTree) PrintTest(counter int, merkleNode *MerkleNode) {
 	} else {
 		fmt.Printf("Node data : %x \n", merkleNode.Data)
 	}
+
+	return false
 }
 
 /******************************************************************************************/
@@ -208,6 +229,29 @@ func CreateMessage(body string, inReplyTo []byte) []byte {
 
 	copy(message[MESSAGE_BODY_FIRST_BYTE:], []byte(body))
 	return message
+}
+
+func CreateMessagesForMerkleTree(numMessages int) [][]byte {
+	messages := make([][]byte, numMessages)
+
+	for i := 0; i < len(messages); i++ {
+		var inReplyTo []byte
+		messageBody := fmt.Sprintf("Message %d", i+1)
+
+		if i%2 != 0 {
+			hash := sha256.New()
+			_, errorMessage := hash.Write(messages[i-1])
+			if errorMessage != nil {
+				log.Fatal("Error : unable to generate a hash for a message \n")
+			}
+			inReplyTo = hash.Sum(nil)
+		} else {
+			inReplyTo = inReplyToZeroes()
+		}
+
+		messages[i] = CreateMessage(messageBody, inReplyTo)
+	}
+	return messages
 }
 
 func nodeDataToString(nodeData []byte, tabulationNum int) string {

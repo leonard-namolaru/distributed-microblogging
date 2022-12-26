@@ -189,11 +189,10 @@ func UdpRead(conn net.PacketConn) {
 
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
-
 		case byte(GET_DATUM_TYPE):
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), NO_DATUM_TYPE, udpAddress, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+GET_DATUM_BODY_LENGTH])
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), DATUM_TYPE, udpAddress, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+GET_DATUM_BODY_LENGTH])
 
-		case ROOT_TYPE:
+		case byte(ROOT_TYPE):
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
 			if i != -1 {
 				sessionsWeOpened[i].RootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+ROOT_BODY_LENGTH]
@@ -223,8 +222,8 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 	case GET_DATUM_TYPE:
 		datagram = GetDatumDatagram(datagramId, data)
 		responseOptions = append(responseOptions, NO_DATUM_TYPE, DATUM_TYPE)
-	case NO_DATUM_TYPE:
-		datagram = NoDatumDatagram(datagramId, data)
+	case DATUM_TYPE:
+		datagram = DatumDatagram(datagramId, data)
 	case ERROR_TYPE:
 		datagram = ErrorDatagram(datagramId, data)
 	default:
