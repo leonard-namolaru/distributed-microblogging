@@ -136,7 +136,10 @@ func (merkleTree *MerkleTree) DepthFirstSearch(nodesHeightCountInitialization in
 	}
 
 	for i := 0; i < len(merkleNode.Children); i++ {
-		merkleTree.DepthFirstSearch(nodesHeightCountInitialization+1, function, hashSearch, merkleNode.Children[i])
+		result := merkleTree.DepthFirstSearch(nodesHeightCountInitialization+1, function, hashSearch, merkleNode.Children[i])
+		if result != nil {
+			return result
+		}
 	}
 
 	return nil
@@ -146,6 +149,7 @@ func (merkleTree *MerkleTree) DepthFirstSearch(nodesHeightCountInitialization in
 func (merkleTree *MerkleTree) GetNodeByHash(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
 	nodeHashString := fmt.Sprintf("%x", merkleNode.Hash)
 	hashSearchString := fmt.Sprintf("%x", hashSearch)
+
 	return (nodeHashString == hashSearchString)
 }
 
