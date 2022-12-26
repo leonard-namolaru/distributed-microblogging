@@ -63,61 +63,9 @@ func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyL
 	return datagram
 }
 
-func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeOut float64) {
-	var str string
-	str = ""
-
-	bodyLength := int(datagram[5]) + int(datagram[6])
-	id := datagram[ID_FIRST_BYTE : ID_FIRST_BYTE+ID_LENGTH]
-	datagramType := datagram[TYPE_BYTE]
-
-	if !isDatagramWeSent {
-		str += fmt.Sprintf("WE RECEIVE A DATAGRAM FROM %s :\n", address)
-	} else {
-		str += fmt.Sprintf("WE SEND A DATAGRAM TO : %s :\n", address)
-	}
-
-	str += fmt.Sprintf("THE DATAGRAM AS BYTES : %v \n", datagram[:(DATAGRAM_MIN_LENGTH+bodyLength+SIGNATURE_LENGTH)])
-	str += fmt.Sprintf("ID : %v TYPE : %d LENGTH : %d  \n", id, datagramType, bodyLength)
-
-	switch datagramType {
-	case byte(HELLO_TYPE):
-		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
-		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
-			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
-
-	case byte(HELLO_REPLAY_TYPE):
-		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
-		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
-			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
-
-	case byte(ROOT_TYPE):
-		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
-	case byte(ERROR_TYPE):
-		str += fmt.Sprintf("BODY : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
-	case byte(DATUM_TYPE):
-		str += fmt.Sprintf("BODY  Hash : %x Value : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+HASH_LENGTH], datagram[BODY_FIRST_BYTE+HASH_LENGTH+4*8:])
-
-	case byte(GET_DATUM_TYPE):
-		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-
-	case byte(NO_DATUM_TYPE):
-		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
-	}
-
-	if timeOut > 0 {
-		str += fmt.Sprintf("TIMEOUT AFTER %.2f SEC \n", timeOut)
-	}
-
-	fmt.Println()
-	log.Print(str)
-}
-
 /********************************************** MERKEL TREE **********************************************/
 func CreateMessage(body string, inReplyTo []byte) []byte {
-	timeSinceJanuary := fmt.Sprintf("%.2f", time.Since(JANUARY_1_2022).Seconds())
+	timeSinceJanuary := fmt.Sprintf("%.d", int(time.Since(JANUARY_1_2022).Seconds()))
 
 	messageBodyLength := len(body)
 	datagramLength := MESSAGE_TOTAL_MIN_LENGTH + messageBodyLength
@@ -216,4 +164,75 @@ func ErrorDatagram(id string, errorMessage []byte) []byte {
 
 	copy(datagram[BODY_FIRST_BYTE:], errorMessage)
 	return datagram
+}
+
+/*****************************************************************************************************/
+
+func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeOut float64) {
+	var str string
+	str = ""
+
+	bodyLength := int(datagram[5]) + int(datagram[6])
+	id := datagram[ID_FIRST_BYTE : ID_FIRST_BYTE+ID_LENGTH]
+	datagramType := datagram[TYPE_BYTE]
+
+	if !isDatagramWeSent {
+		str += fmt.Sprintf("WE RECEIVE A DATAGRAM FROM %s :\n", address)
+	} else {
+		str += fmt.Sprintf("WE SEND A DATAGRAM TO : %s :\n", address)
+	}
+
+	str += fmt.Sprintf("THE DATAGRAM AS BYTES : %v \n", datagram[:(DATAGRAM_MIN_LENGTH+bodyLength+SIGNATURE_LENGTH)])
+	str += fmt.Sprintf("ID : %v TYPE : %d LENGTH : %d  \n", id, datagramType, bodyLength)
+
+	switch datagramType {
+	case byte(HELLO_TYPE):
+		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
+		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
+			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
+
+	case byte(HELLO_REPLAY_TYPE):
+		userNameLength := datagram[USER_NAME_LENGTH_BYTE]
+		str += fmt.Sprintf("BODY : Flags : %v Username Length : %d Username : %s \n", datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], userNameLength,
+			datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+userNameLength])
+
+	case byte(ROOT_TYPE):
+		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
+	case byte(ERROR_TYPE):
+		str += fmt.Sprintf("BODY : %s \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
+	case byte(DATUM_TYPE):
+		str += fmt.Sprintf("BODY : %s ", datumDatagramToString(datagram[BODY_FIRST_BYTE:]))
+	case byte(GET_DATUM_TYPE):
+		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+
+	case byte(NO_DATUM_TYPE):
+		str += fmt.Sprintf("BODY : %x \n", datagram[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+	}
+
+	if timeOut > 0 {
+		str += fmt.Sprintf("TIMEOUT AFTER %.2f SEC \n", timeOut)
+	}
+
+	fmt.Println()
+	log.Print(str)
+}
+
+func datumDatagramToString(datumDatagramBody []byte) string {
+	Hash := datumDatagramBody[0:HASH_LENGTH]
+	nodeType := datumDatagramBody[HASH_LENGTH+NODE_TYPE_BYTE]
+
+	if nodeType == 0 { // Type 0 indicates that it is a message
+		messageDate := datumDatagramBody[HASH_LENGTH+MESSAGE_DATE_FIRST_BYTE : HASH_LENGTH+MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH]
+		messageInReplyTo := datumDatagramBody[HASH_LENGTH+MESSAGE_IN_REPLY_TO_FIRST_BYTE : HASH_LENGTH+MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH]
+		messageLength := int(datumDatagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE]) + int(datumDatagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE+1])
+		messageBody := datumDatagramBody[HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE:]
+
+		messageDateSec := int(messageDate[0]) + int(messageDate[1]) + int(messageDate[2]) + int(messageDate[3])
+		messageDateTime := JANUARY_1_2022.Add(time.Duration(messageDateSec) * time.Second).String()
+		return fmt.Sprintf("Node hash : %x , Node type :  %d, Date : %s, In reply to : %x, Length : %d, Body : %s \n", Hash, nodeType, messageDateTime, messageInReplyTo, messageLength, messageBody)
+	}
+
+	return ""
 }

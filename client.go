@@ -33,6 +33,7 @@ const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
 const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
 const MERKLE_TREE_MAX_ARITY = 32
+const UDP_LISTENING_ADDRESS = ":8081"
 
 var thisPeerMerkleTree *MerkleTree
 
@@ -92,7 +93,7 @@ func main() {
 	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: ""}
 	jsonEncoding, err := json.Marshal(serverRegistration)
 	if err != nil {
-		fmt.Println("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
+		log.Fatalf("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
 	}
 
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/register"}
@@ -111,11 +112,13 @@ func main() {
 	//myByteId := CreateRandId()
 
 	// func net.Dial(network string, address string) (net.Conn, error)
-	conn, errorMessage := net.ListenPacket("udp", fmt.Sprintf(":%d", 8081))
+	conn, errorMessage := net.ListenPacket("udp", UDP_LISTENING_ADDRESS)
 	if errorMessage != nil {
 		log.Fatalf("The method net.ListenUDP() failed in sendUdp() to address : %v\n", errorMessage)
 	}
-	log.Printf("Listening to :%d \n", 8082)
+	log.Printf("LISTENING TO %s \n", UDP_LISTENING_ADDRESS)
+
+	// The reading of the received datagrams is done in a separate thread
 	go UdpRead(conn)
 
 	for _, address := range serverUdpAddresses {
@@ -179,7 +182,7 @@ func main() {
 	/* STEP 7 : HELLO TO (ALL) PEER ADDRESSES
 	 */
 	for _, peer := range peers {
-		if peer.Username != NAME_FOR_SERVER_REGISTRATION {
+		if peer.Username == "jch" || peer.Username == "bet" {
 			for _, address := range peer.Adresses {
 				var full_address string
 
