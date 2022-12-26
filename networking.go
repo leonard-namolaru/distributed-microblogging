@@ -14,18 +14,18 @@ import (
 )
 
 type WaitingResponse struct {
-	FullAddress   net.UDPAddr
+	FullAddress   *net.UDPAddr
 	DatagramTypes []int
 	Id            []byte
 }
 
 type OpenSession struct {
-	FullAddress      net.UDPAddr
+	FullAddress      *net.UDPAddr
 	LastDatagramTime time.Time
 }
 
 type SessionWeOpened struct {
-	FullAddress      net.UDPAddr
+	FullAddress      *net.UDPAddr
 	LastDatagramTime time.Time
 	Merkle           *MerkleTree
 	RootHash         []byte
@@ -113,12 +113,13 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 }
 
 func UdpRead(conn net.PacketConn) {
-	buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES)
 
 	for {
+		buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES)
+
 		_, address, err := conn.ReadFrom(buf)
 		if err != nil {
-			log.Fatal("The method conn.ReadFrom() failed in udpRead() : %v \n", err)
+			log.Fatalf("The method conn.ReadFrom() failed in udpRead() : %v \n", err)
 		}
 
 		if DEBUG_MODE {
@@ -128,7 +129,7 @@ func UdpRead(conn net.PacketConn) {
 		nonSolicitMessage := false
 		udpAddress, err := net.ResolveUDPAddr("udp", address.String())
 		if err != nil {
-			log.Fatal("The method net.ResolveUDPAddr() failed in udpRead() during the resolve of the address %s : %v \n", address.String(), err)
+			log.Fatalf("The method net.ResolveUDPAddr() failed in udpRead() during the resolve of the address %s : %v \n", address.String(), err)
 		}
 
 		mutex.Lock()
@@ -146,8 +147,8 @@ func UdpRead(conn net.PacketConn) {
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := SessionWeOpened{FullAddress: *udpAddress, LastDatagramTime: time.Now(), Merkle: nil, RootHash: nil}
-						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
+						sessionWeOpened := &SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil, RootHash: nil}
+						sessionsWeOpened = append(sessionsWeOpened, *sessionWeOpened)
 					}
 				}
 
@@ -183,8 +184,8 @@ func UdpRead(conn net.PacketConn) {
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil)
-			openSession := OpenSession{FullAddress: *udpAddress, LastDatagramTime: time.Now()}
-			openSessions = append(openSessions, openSession)
+			openSession := &OpenSession{FullAddress: udpAddress, LastDatagramTime: time.Now()}
+			openSessions = append(openSessions, *openSession)
 
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
@@ -205,7 +206,7 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 	var datagram []byte
 	var responseOptions []int
 	var responseReceived bool
-	var waitingResponse WaitingResponse
+	var waitingResponse *WaitingResponse
 	writingSuccessful := true
 
 	switch datagramType {
@@ -235,8 +236,8 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		mutex.Lock()
 		i := sliceContainsAddress(waitingResponses, address.String())
 		if i == -1 {
-			waitingResponse = WaitingResponse{FullAddress: *address, DatagramTypes: responseOptions}
-			waitingResponses = append(waitingResponses, waitingResponse)
+			waitingResponse = &WaitingResponse{FullAddress: address, DatagramTypes: responseOptions}
+			waitingResponses = append(waitingResponses, *waitingResponse)
 		} else {
 			waitingResponses[i].DatagramTypes = append(waitingResponses[i].DatagramTypes, responseOptions...)
 		}
@@ -318,7 +319,7 @@ func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn 
 			if time.Since(element.LastDatagramTime).Minutes() > 55 {
 				// We resend a Hello message, if we receive HelloReplay as a response
 				// (the write function will return true), we succeed in renewing the session
-				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, &element.FullAddress, nil) {
+				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, element.FullAddress, nil) {
 					return i
 				} else {
 					sessionsWeOpened = append(sessionsWeOpened[:i], sessionsWeOpened[i+1:]...) // We remove the session

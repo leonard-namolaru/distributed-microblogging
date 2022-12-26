@@ -204,7 +204,7 @@ func main() {
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
 		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
-			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
+			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil)
 		}
 	}
 
@@ -212,24 +212,16 @@ func main() {
 	 */
 	for _, session := range sessionsWeOpened {
 		if session.RootHash != nil {
-			UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &session.FullAddress, session.RootHash)
+			UdpWrite(conn, datagram_id, GET_DATUM_TYPE, session.FullAddress, session.RootHash)
 		}
 	}
 
 	fmt.Println()
 	fmt.Printf("...\n")
+
 	for {
 	}
 
-}
-
-func createPeer(username string, addressesPeer []Address, publicKey string) *Peer {
-	peer := &Peer{
-		Username: username,
-		Adresses: addressesPeer,
-		Key:      publicKey,
-	}
-	return peer
 }
 
 func CreateRandId() []byte {
