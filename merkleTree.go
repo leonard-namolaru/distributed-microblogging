@@ -265,7 +265,7 @@ func nodeDataToString(nodeData []byte, tabulationNum int) string {
 	if nodeType == 0 { // Type 0 indicates that it is a message
 		messageDate := nodeData[MESSAGE_DATE_FIRST_BYTE : MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH]
 		messageInReplyTo := nodeData[MESSAGE_IN_REPLY_TO_FIRST_BYTE : MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH]
-		messageLength := int(nodeData[MESSAFE_LENGTH_FIRST_BYTE]) + int(nodeData[MESSAFE_LENGTH_FIRST_BYTE+1])
+		messageLength := int(nodeData[MESSAFE_LENGTH_FIRST_BYTE])<<8 | int(nodeData[MESSAFE_LENGTH_FIRST_BYTE+1])
 		messageBody := nodeData[MESSAGE_BODY_FIRST_BYTE:]
 
 		messageDateSec := int(messageDate[0]) + int(messageDate[1]) + int(messageDate[2]) + int(messageDate[3])

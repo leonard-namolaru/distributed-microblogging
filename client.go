@@ -42,7 +42,7 @@ func main() {
 
 	httpClient := CreateHttpClient()
 
-	/* A LIST OF MESSAGES AVAILABLE TO THE OTHER PEERS
+	/* A LIST OF MESSAGES AVAILABLE FOR THE OTHER PEERS
 	 */
 	ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
 
@@ -92,8 +92,10 @@ func main() {
 	// func net.Dial(network string, address string) (net.Conn, error)
 	conn, errorMessage := net.ListenPacket("udp", UDP_LISTENING_ADDRESS)
 	if errorMessage != nil {
-		log.Fatalf("The method net.ListenUDP() failed in sendUdp() to address : %v\n", errorMessage)
+		log.Fatalf("The method net.ListenPacket() failed with %s address : %v\n", UDP_LISTENING_ADDRESS, errorMessage)
 	}
+
+	fmt.Println()
 	log.Printf("LISTENING TO %s \n", UDP_LISTENING_ADDRESS)
 
 	// The reading of the received datagrams is done in a separate thread
@@ -109,7 +111,7 @@ func main() {
 		}
 		serverAddr, err := net.ResolveUDPAddr("udp", full_address)
 		if err != nil {
-			panic(err)
+			log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 		}
 
 		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
@@ -172,7 +174,7 @@ func main() {
 				}
 				serverAddr, err := net.ResolveUDPAddr("udp", full_address)
 				if err != nil {
-					panic(err)
+					log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 				}
 
 				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
@@ -216,7 +218,7 @@ func main() {
 	}
 
 	fmt.Println()
-	fmt.Printf("...\n")
+	fmt.Printf("WAITING FOR NEW MESSAGES ...\n")
 
 	for {
 	}

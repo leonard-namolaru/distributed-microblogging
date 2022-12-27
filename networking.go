@@ -29,7 +29,12 @@ type SessionWeOpened struct {
 	LastDatagramTime time.Time
 	Merkle           *MerkleTree
 	buffer           [][]byte
-	//mutex            sync.Mutex
+	BufferIndex      int
+}
+
+type DepthFirstSearchBuffer struct {
+	FullAddress net.UDPAddr
+	Buffer      [][]byte
 }
 
 const ERROR_TYPE = 254
