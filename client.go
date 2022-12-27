@@ -185,7 +185,7 @@ func main() {
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
 		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
-			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil)
+			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
 		}
 	}
 
@@ -193,7 +193,7 @@ func main() {
 	 */
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if len(sessionsWeOpened[i].buffer) != 0 {
-			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0])
+			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0])
 			if writeResult {
 
 				getDatumResult := getDatum(conn, i, datagram_id)
@@ -233,7 +233,7 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string) bool {
 	hash := datagramBody[0:HASH_LENGTH]
 
 	if HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE < len(datagramBody) {
-		messageLength := int(datagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE]) + int(datagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE+1])
+		messageLength := int(datagramBody[HASH_LENGTH+LENGTH_FIRST_BYTE])<<8 | int(datagramBody[HASH_LENGTH+LENGTH_FIRST_BYTE+1])
 		messageBody := datagramBody[HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE:]
 		if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == 0 || messageLength == len(messageBody) {
 			return true
@@ -252,7 +252,7 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string) bool {
 	for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
 		hashI := datagramBody[i : i+HASH_LENGTH]
 
-		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI)
+		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, &sessionsWeOpened[sessionIndex].FullAddress, hashI)
 		if writeResult {
 			getDatum(conn, sessionIndex, datagramId)
 		} else {

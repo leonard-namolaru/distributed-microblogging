@@ -25,10 +25,11 @@ type OpenSession struct {
 }
 
 type SessionWeOpened struct {
-	FullAddress      *net.UDPAddr
+	FullAddress      net.UDPAddr
 	LastDatagramTime time.Time
 	Merkle           *MerkleTree
 	buffer           [][]byte
+	//mutex            sync.Mutex
 }
 
 const ERROR_TYPE = 254
@@ -147,8 +148,8 @@ func UdpRead(conn net.PacketConn) {
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := &SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil}
-						sessionsWeOpened = append(sessionsWeOpened, *sessionWeOpened)
+						sessionWeOpened := SessionWeOpened{FullAddress: *udpAddress, LastDatagramTime: time.Now(), Merkle: nil}
+						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
 				}
 
@@ -199,7 +200,7 @@ func UdpRead(conn net.PacketConn) {
 			}
 
 		case byte(DATUM_TYPE):
-			bodyLength := int(buf[LENGTH_FIRST_BYTE]) + int(buf[LENGTH_FIRST_BYTE+1])
+			bodyLength := int(buf[LENGTH_FIRST_BYTE])<<8 | int(buf[LENGTH_FIRST_BYTE+1])
 
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
 			if i != -1 {
@@ -207,7 +208,7 @@ func UdpRead(conn net.PacketConn) {
 			}
 
 		case byte(NO_DATUM_TYPE):
-			bodyLength := int(buf[LENGTH_FIRST_BYTE]) + int(buf[LENGTH_FIRST_BYTE+1])
+			bodyLength := int(buf[LENGTH_FIRST_BYTE])<<8 | int(buf[LENGTH_FIRST_BYTE+1])
 
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
 			if i != -1 {
@@ -335,7 +336,7 @@ func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn 
 			if time.Since(element.LastDatagramTime).Minutes() > 55 {
 				// We resend a Hello message, if we receive HelloReplay as a response
 				// (the write function will return true), we succeed in renewing the session
-				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, element.FullAddress, nil) {
+				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, &element.FullAddress, nil) {
 					return i
 				} else {
 					sessionsWeOpened = append(sessionsWeOpened[:i], sessionsWeOpened[i+1:]...) // We remove the session

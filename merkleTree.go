@@ -301,7 +301,7 @@ func nodeDataToString(nodeData []byte, tabulationNum int) string {
 		hashCount := 0
 		for i := NODE_TYPE_BYTE + 1; i < len(nodeData); i += HASH_LENGTH {
 			hashCount++
-			for i := 0; i < tabulationNum; i++ {
+			for j := 0; j < tabulationNum; j++ {
 				str += fmt.Sprintf("\t")
 			}
 			str += fmt.Sprintf("Hash %d : %x \n", hashCount, nodeData[i:i+HASH_LENGTH])
