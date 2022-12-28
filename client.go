@@ -253,11 +253,7 @@ func main() {
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
 		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
-<<<<<<< HEAD
 			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil, privateKey)
-=======
-			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
->>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 		}
 	}
 
@@ -265,11 +261,7 @@ func main() {
 	 */
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if len(sessionsWeOpened[i].buffer) != 0 {
-<<<<<<< HEAD
 			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0], privateKey)
-=======
-			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0])
->>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 			if writeResult {
 
 				getDatumResult := getDatum(conn, i, datagram_id, privateKey)
@@ -327,12 +319,7 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateK
 
 	for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
 		hashI := datagramBody[i : i+HASH_LENGTH]
-
-<<<<<<< HEAD
 		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI, privateKey)
-=======
-		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, &sessionsWeOpened[sessionIndex].FullAddress, hashI)
->>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 		if writeResult {
 			getDatum(conn, sessionIndex, datagramId, privateKey)
 		} else {

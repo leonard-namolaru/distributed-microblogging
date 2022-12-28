@@ -342,11 +342,7 @@ func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn 
 			if time.Since(element.LastDatagramTime).Minutes() > 55 {
 				// We resend a Hello message, if we receive HelloReplay as a response
 				// (the write function will return true), we succeed in renewing the session
-<<<<<<< HEAD
 				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, element.FullAddress, nil, privateKey) {
-=======
-				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, &element.FullAddress, nil) {
->>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 					return i
 				} else {
 					sessionsWeOpened = append(sessionsWeOpened[:i], sessionsWeOpened[i+1:]...) // We remove the session
