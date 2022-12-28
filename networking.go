@@ -60,7 +60,7 @@ func CreateHttpClient() *http.Client {
 	return client
 }
 
-func HttpRequest(requestType string, client *http.Client, requestUrl string, data []byte) ([]byte, int) {
+func HttpRequest(requestType string, client *http.Client, requestUrl string, data []byte, responseBodyPrintMethod string) ([]byte, int) {
 	var req *http.Request
 	var errorMessage error
 	if DEBUG_MODE {
@@ -103,7 +103,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	response.Body.Close() // func (io.Closer).Close() error
 	if DEBUG_MODE {
 		fmt.Printf("HTTP RESPONSE STATUS CODE : %d \n", response.StatusCode)
-		fmt.Printf("HTTP RESPONSE BODY :\n%s \n", responseBody)
+		fmt.Printf("HTTP RESPONSE BODY :\n"+responseBodyPrintMethod+"\n", responseBody)
 	}
 
 	return responseBody, response.StatusCode

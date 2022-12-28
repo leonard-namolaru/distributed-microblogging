@@ -2,22 +2,22 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	cryptoRand "crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
 	"net/url"
-	"strings"
-	"encoding/pem"
-	"crypto/x509"
 	"os"
-	"io/ioutil"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	cryptoRand "crypto/rand"
-	"encoding/base64"
+	"strings"
 )
 
 type ServerRegistration struct {
@@ -39,7 +39,7 @@ type Address struct {
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
 const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
-const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION+"_key.priv"
+const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION + "_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
 const UDP_LISTENING_ADDRESS = ":8081"
 
@@ -56,13 +56,13 @@ func main() {
 	ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
 
 	/* KEY CRYPTOGRAPHY
-	*/
+	 */
 
 	fileInfo, err := os.Stat(NAME_FILE_PRIVATE_KEY)
-    if err != nil || fileInfo.Size() == 0 {
+	if err != nil || fileInfo.Size() == 0 {
 
-    	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptoRand.Reader)
-    	privateKeyDr, err := x509.MarshalECPrivateKey(privateKey)
+		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptoRand.Reader)
+		privateKeyDr, err := x509.MarshalECPrivateKey(privateKey)
 		if err != nil {
 			panic(err)
 		}
@@ -77,9 +77,9 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-    }
+	}
 
-    data, err := ioutil.ReadFile(NAME_FILE_PRIVATE_KEY)
+	data, err := ioutil.ReadFile(NAME_FILE_PRIVATE_KEY)
 	if err != nil {
 		panic(err)
 	}
@@ -88,30 +88,31 @@ func main() {
 	lines = lines[1 : len(lines)-2]
 
 	privateKeyString := strings.Join(lines, "")
+	if DEBUG_MODE {
+		fmt.Printf("privateKeyString : %v\n", privateKeyString)
+	}
 
-	fmt.Printf("privateKeyString : %v\n", privateKeyString)
-
-	// créer la clé privée
+	// Create the private key
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), bytes.NewReader([]byte(privateKeyString)))
 	if err != nil {
 		panic(err)
 	}
 
-	publicKey , _ := privateKey.Public().(*ecdsa.PublicKey)
+	publicKey, _ := privateKey.Public().(*ecdsa.PublicKey)
 	publicKey64Bytes := make([]byte, 64)
 	publicKey.X.FillBytes(publicKey64Bytes[:32])
 	publicKey.Y.FillBytes(publicKey64Bytes[32:])
 	publicKeyEncoded := base64.RawStdEncoding.EncodeToString(publicKey64Bytes)
 
 	if DEBUG_MODE {
-		fmt.Printf("Our publicKey : %s\n", publicKeyEncoded)
+		fmt.Printf("Our public key : %s\n", publicKeyEncoded)
 	}
 
-	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
+	/* GET THE UDP ADDRESS OF THE SERVER
 	 *  HTTP GET to /udp-address followed by a JSON decode.
 	 */
 	requestUrl := url.URL{Scheme: "https", Host: HOST, Path: "/udp-address"}
-	httpResponseBody, _ := HttpRequest("GET", httpClient, requestUrl.String(), nil)
+	httpResponseBody, _ := HttpRequest("GET", httpClient, requestUrl.String(), nil, "%s")
 
 	var serverUdpAddresses []Address
 	errorMessage := json.Unmarshal(httpResponseBody, &serverUdpAddresses)
@@ -126,7 +127,7 @@ func main() {
 		}
 	}
 
-	/* STEP 2 : SERVER REGISTRATION
+	/* SERVER REGISTRATION
 	 *  A POST REQUEST TO /register
 	 */
 	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: publicKeyEncoded}
@@ -136,26 +137,26 @@ func main() {
 	}
 
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/register"}
-	httpResponseBody, _ = HttpRequest("POST", httpClient, requestUrl.String(), jsonEncoding)
+	httpResponseBody, _ = HttpRequest("POST", httpClient, requestUrl.String(), jsonEncoding, "%s")
 
-	/* STEP 3 : GET THE SERVER'S PUBLIC KEY
+	/* GET THE SERVER'S PUBLIC KEY
 	 * THE PUBLIC KEY THAT THE SERVER USES TO SIGN MESSAGES IS AVAILABLE AT /server-key.
 	 * IF A GET TO THIS URL RETURNS 404, THE SERVER DOES NOT SIGN ITS MESSAGES.
 	 */
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
-	publicKeyFromServerBytes, _ := HttpRequest("GET", httpClient, requestUrl.String(), nil)
+	publicKeyFromServerBytes, _ := HttpRequest("GET", httpClient, requestUrl.String(), nil, "%x")
 	publicKeyFromServerString := base64.RawStdEncoding.EncodeToString(publicKeyFromServerBytes)
 
 	if DEBUG_MODE {
-		fmt.Printf("public Key from server : %s\n", publicKeyFromServerString)
+		fmt.Printf("Public Key from server as string : %s\n", publicKeyFromServerString)
 	}
 
-	/* STEP 4 : HELLO TO EACH OF THE ADDRESSES OBTAINED IN STEP 1
+	/* HELLO TO EACH OF THE UDP ADDRESSES OF THE SERVER
 	 */
 
 	//myByteId := CreateRandId()
 
-	// func net.Dial(network string, address string) (net.Conn, error)
+	// func net.ListenPacket(network string, address string) (net.PacketConn, error)
 	conn, errorMessage := net.ListenPacket("udp", UDP_LISTENING_ADDRESS)
 	if errorMessage != nil {
 		log.Fatalf("The method net.ListenPacket() failed with %s address : %v\n", UDP_LISTENING_ADDRESS, errorMessage)
@@ -169,11 +170,11 @@ func main() {
 
 	for _, address := range serverUdpAddresses {
 		var full_address string
-		if net.ParseIP(address.Ip).To4() == nil {
-			full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
+		if net.ParseIP(address.Ip).To4() == nil { // If the address cannot be converted to ipV4
+			full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port) // ipV6
 
 		} else {
-			full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
+			full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port) // ipV4
 		}
 		serverAddr, err := net.ResolveUDPAddr("udp", full_address)
 		if err != nil {
@@ -183,14 +184,14 @@ func main() {
 		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
 	}
 
-	/* STEP 5 : LIST OF PEERS KNOWN TO THE SERVER
+	/* LIST OF PEERS KNOWN TO THE SERVER
 	 * A GET REQUEST TO THE URL /peers.
 	 * THE SERVER RESPONDS WITH THE BODY CONTAINING A LIST OF PEER NAMES, ONE PER LINE.
 	 */
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
-	httpResponseBody, _ = HttpRequest("GET", httpClient, requestUrl.String(), nil)
+	httpResponseBody, _ = HttpRequest("GET", httpClient, requestUrl.String(), nil, "%s")
 
-	/* STEP 6 : PEER ADDRESSES
+	/* PEER ADDRESSES
 	 * TO LOCATE A PEER NAMED p, THE CLIENT MAKES A GET REQUEST TO THE URL /peers/p.
 	 * THE RESPONSE BODY CONTAINS A JSON OBJECT
 	 */
@@ -201,7 +202,7 @@ func main() {
 
 		if len(p) != 0 {
 			peerUrl := requestUrl.String() + "/" + p
-			bodyfromPeer, statusCode := HttpRequest("GET", httpClient, peerUrl, nil)
+			bodyfromPeer, statusCode := HttpRequest("GET", httpClient, peerUrl, nil, "%s")
 
 			if statusCode == 200 {
 				var peer Peer
@@ -225,7 +226,7 @@ func main() {
 		}
 	}
 
-	/* STEP 7 : HELLO TO (ALL) PEER ADDRESSES
+	/* HELLO TO (ALL) PEER ADDRESSES
 	 */
 	for _, peer := range peers {
 		if peer.Username == "jch" || peer.Username == "bet" {
@@ -248,7 +249,7 @@ func main() {
 		}
 	}
 
-	/* STEP 8 : ROOT REQUEST TO ALL THE SESSIONS WE OPENED
+	/* ROOT REQUEST TO ALL THE SESSIONS WE OPENED
 	 */
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
@@ -257,7 +258,7 @@ func main() {
 		}
 	}
 
-	/* STEP 9 : USING THE HASH OF THE ROOT IN ORDER TO OBTAIN THE INFORMATION THAT THE HASH REPRESENTS
+	/* OBTAINING THE MERKLE TREE FROM ALL THE PEERS WHO GAVE US THE HASH OF THEIR ROOT
 	 */
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if len(sessionsWeOpened[i].buffer) != 0 {
@@ -268,6 +269,7 @@ func main() {
 				if getDatumResult || true {
 					var messages [][]byte
 
+					// We start from index 1 because the hash of the root is stored in index 0 (we have already used the hash of the root)
 					for j := 1; j < len(sessionsWeOpened[i].buffer); j++ {
 
 						if int(sessionsWeOpened[i].buffer[j][HASH_LENGTH+NODE_TYPE_BYTE]) == 0 {
@@ -291,10 +293,6 @@ func main() {
 
 }
 
-func checkHash(hash []byte, data []byte) bool {
-	return true
-}
-
 func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	bufferIndex := len(sessionsWeOpened[sessionIndex].buffer) - 1
 	datagramBody := sessionsWeOpened[sessionIndex].buffer[bufferIndex]
@@ -313,7 +311,7 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateK
 		return false
 	}
 
-	if !checkHash(hash, datagramBody[HASH_LENGTH:]) {
+	if !CheckHash(hash, datagramBody[HASH_LENGTH:]) {
 		return false
 	}
 

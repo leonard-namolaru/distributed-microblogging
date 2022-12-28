@@ -8,7 +8,9 @@ import (
 )
 
 const NODE_TYPE_INTERNAL = 1
+const NODE_TYPE_MESSAGE = 0
 
+/* The format of the Data field of each node */
 const NODE_TYPE_BYTE = 0
 const MESSAGE_DATE_FIRST_BYTE = 1
 const MESSAGE_DATE_LENGTH = 4
@@ -22,7 +24,6 @@ const MESSAGE_TOTAL_MIN_LENGTH = 1 + MESSAGE_DATE_LENGTH + MESSAFE_IN_REPLY_TO_L
 type MerkleNode struct {
 	ParentNode *MerkleNode   // Pointer to the parent node
 	Children   []*MerkleNode // A table of pointers to the child nodes
-	IsLeaf     bool          // Boolean value. Is it a leaf or an internal/root node?
 	Hash       []byte
 	Data       []byte
 }
@@ -60,12 +61,11 @@ func (merkleTree *MerkleTree) createLeafNodes(messages [][]byte) []*MerkleNode {
 
 		_, errorMessage := hash.Write(messages[i])
 		if errorMessage != nil {
-			log.Fatal("Error : unable to generate a hash for a message \n")
+			log.Fatalf("Error : unable to generate a hash for the message %s \n", messages[i])
 		}
 
 		leafs = append(leafs, &MerkleNode{
 			Hash:       hash.Sum(nil),
-			IsLeaf:     true,
 			Children:   nil,
 			ParentNode: nil, // Will be determined later
 			Data:       messages[i],
@@ -108,13 +108,12 @@ func (merkleTree *MerkleTree) createNodes(leafNodes []*MerkleNode) *MerkleNode {
 			hashesConcatenation = append([]byte{NODE_TYPE_INTERNAL}, hashesConcatenation...)
 			_, errorMessage := hash.Write(hashesConcatenation)
 			if errorMessage != nil {
-				log.Fatal("Error : unable to generate a hash for hashes concatenation \n")
+				log.Fatalf("Error : unable to generate a hash for hashes concatenation : %s \n", hashesConcatenation)
 			}
 
 			merkleNode.Children = children
 			merkleNode.Hash = hash.Sum(nil)
 			merkleNode.Data = hashesConcatenation
-			merkleNode.IsLeaf = false
 			merkleNodes = append(merkleNodes, merkleNode)
 
 			if len(leafNodes) <= merkleTree.MaxArity {
@@ -143,7 +142,7 @@ func (merkleTree *MerkleTree) DepthFirstSearch(nodesHeightCountInitialization in
 		return merkleNode
 	}
 
-	if merkleNode.IsLeaf {
+	if merkleNode.Data[NODE_TYPE_BYTE] != NODE_TYPE_INTERNAL {
 		return nil
 	}
 
@@ -174,24 +173,6 @@ func (merkleTree *MerkleTree) PrintNodeHash(nodeHeight int, merkleNode *MerkleNo
 	return false
 }
 
-func (merkleTree *MerkleTree) PrintNodeData(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
-	for i := 0; i < nodeHeight; i++ {
-		fmt.Printf("\t")
-	}
-
-	fmt.Printf("Data : %x \n", merkleNode.Data)
-	return false
-}
-
-func (merkleTree *MerkleTree) PrintNodeDataInBytes(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
-	for i := 0; i < nodeHeight; i++ {
-		fmt.Printf("\t")
-	}
-
-	fmt.Printf("Data : %v \n", merkleNode.Data)
-	return false
-}
-
 func (merkleTree *MerkleTree) PrintNumberChildren(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
 	for i := 0; i < nodeHeight; i++ {
 		fmt.Printf("\t")
@@ -216,19 +197,6 @@ func (merkleTree *MerkleTree) PrintNodesData(nodeHeight int, merkleNode *MerkleN
 	return false
 }
 
-func (merkleTree *MerkleTree) PrintTest(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
-	for i := 0; i < nodeHeight; i++ {
-		fmt.Printf("\t")
-	}
-	if merkleNode.IsLeaf {
-		fmt.Printf("Leaf hash : %x \n", merkleNode.Hash)
-	} else {
-		fmt.Printf("Node data : %x \n", merkleNode.Data)
-	}
-
-	return false
-}
-
 /******************************************************************************************/
 func CreateMessage(body string, inReplyTo []byte) []byte {
 	timeSinceJanuary := fmt.Sprintf("%d", int(time.Since(JANUARY_1_2022).Seconds()))
@@ -237,7 +205,7 @@ func CreateMessage(body string, inReplyTo []byte) []byte {
 	messageLength := MESSAGE_TOTAL_MIN_LENGTH + messageBodyLength
 	message := make([]byte, messageLength)
 
-	message[NODE_TYPE_BYTE] = 0 // Type 0 indicates that it is a message
+	message[NODE_TYPE_BYTE] = NODE_TYPE_MESSAGE
 	copy(message[MESSAGE_DATE_FIRST_BYTE:MESSAGE_DATE_FIRST_BYTE+MESSAGE_DATE_LENGTH], []byte(timeSinceJanuary))
 	copy(message[MESSAGE_IN_REPLY_TO_FIRST_BYTE:MESSAGE_IN_REPLY_TO_FIRST_BYTE+MESSAFE_IN_REPLY_TO_LENGTH], inReplyTo)
 	message[MESSAFE_LENGTH_FIRST_BYTE] = byte(messageBodyLength >> 8)
@@ -258,7 +226,7 @@ func CreateMessagesForMerkleTree(numMessages int) [][]byte {
 			hash := sha256.New()
 			_, errorMessage := hash.Write(messages[i-1])
 			if errorMessage != nil {
-				log.Fatal("Error : unable to generate a hash for a message \n")
+				log.Fatalf("Error : unable to generate a hash for the message %s \n", messages[i-1])
 			}
 			inReplyTo = hash.Sum(nil)
 		} else {
@@ -270,6 +238,19 @@ func CreateMessagesForMerkleTree(numMessages int) [][]byte {
 	return messages
 }
 
+// In-reply-to indicates the hash of the message to which a message replies.
+// It is 0 if a message does not respond to another message. Field size : 32 bytes.
+func inReplyToZeroes() []byte {
+	inReplyTo := make([]byte, MESSAFE_IN_REPLY_TO_LENGTH)
+
+	for i := 0; i < len(inReplyTo); i++ {
+		inReplyTo[i] = 0
+	}
+
+	return inReplyTo
+}
+
+/******************************************************************************************/
 func nodeDataToString(nodeData []byte, tabulationNum int) string {
 	str := ""
 	nodeType := nodeData[NODE_TYPE_BYTE]
@@ -323,48 +304,15 @@ func nodeDataToString(nodeData []byte, tabulationNum int) string {
 	return str
 }
 
-// In-reply-to indicates the hash of the message to which a message replies.
-// It is 0 if a message does not respond to another message. Field size : 32 bytes.
-func inReplyToZeroes() []byte {
-	inReplyTo := make([]byte, MESSAFE_IN_REPLY_TO_LENGTH)
+func CheckHash(hash []byte, data []byte) bool {
 
-	for i := 0; i < len(inReplyTo); i++ {
-		inReplyTo[i] = 0
+	dataHash := sha256.New()
+	_, errorMessage := dataHash.Write(data)
+	if errorMessage != nil {
+		log.Fatalf("Error : unable to generate a hash for the message %s \n", data)
 	}
 
-	return inReplyTo
+	hashString := fmt.Sprintf("%x", hash)
+	dataHashString := fmt.Sprintf("%x", dataHash.Sum(nil))
+	return (hashString == dataHashString)
 }
-
-/*
-func main() { // For testing purposes only
-	var merkleTree *MerkleTree
-
-	message1 := []byte("1")
-	message2 := []byte("2")
-	message3 := []byte("3")
-	message4 := []byte("4")
-	message5 := []byte("5")
-	message6 := []byte("6")
-	message7 := []byte("7")
-	message8 := []byte("8")
-	message9 := []byte("9")
-
-	udpDatagrams := []([]byte){message1, message2, message3, message4, message5, message6, message7, message8, message9}
-
-	merkleTree = CreateTree(udpDatagrams, 2)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
-
-	fmt.Printf("\n\n\n")
-
-	merkleTree = CreateTree(udpDatagrams, 3)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
-
-	fmt.Printf("\n\n\n")
-
-	merkleTree = CreateTree(udpDatagrams, 4)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintTest)
-	merkleTree.DepthFirstSearch(0, merkleTree.PrintNumberChildren)
-}
-*/
