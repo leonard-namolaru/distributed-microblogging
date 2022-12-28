@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"crypto/ecdsa"
 )
 
 type WaitingResponse struct {
@@ -112,7 +113,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	return responseBody, response.StatusCode
 }
 
-func UdpRead(conn net.PacketConn) {
+func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 	for {
 		buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES+500)
@@ -143,7 +144,7 @@ func UdpRead(conn net.PacketConn) {
 
 				// In addition to sessions opened by other peers, we also store sessions we opened
 				if buf[TYPE_BYTE] == 128 {
-					i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+					i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
@@ -165,7 +166,7 @@ func UdpRead(conn net.PacketConn) {
 		mutex.Unlock()
 
 		if nonSolicitMessage && buf[TYPE_BYTE] != ERROR_TYPE {
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("A response type datagram was received even though we did not request such a response"))
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("A response type datagram was received even though we did not request such a response"), privateKey)
 			continue
 		}
 
@@ -176,24 +177,24 @@ func UdpRead(conn net.PacketConn) {
 			}
 		} else { // If there is no open session
 			if int(buf[TYPE_BYTE]) != HELLO_TYPE && int(buf[TYPE_BYTE]) <= 127 {
-				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("No handshake was performed (Hello, HelloReplay) or more than an hour has passed since the last interaction"))
+				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("No handshake was performed (Hello, HelloReplay) or more than an hour has passed since the last interaction"), privateKey)
 				continue
 			}
 		}
 
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil)
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil, privateKey)
 			openSession := &OpenSession{FullAddress: udpAddress, LastDatagramTime: time.Now()}
 			openSessions = append(openSessions, *openSession)
 
 		case byte(ROOT_REQUEST_TYPE):
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil)
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil, privateKey)
 		case byte(GET_DATUM_TYPE):
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), DATUM_TYPE, udpAddress, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+GET_DATUM_BODY_LENGTH])
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), DATUM_TYPE, udpAddress, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+GET_DATUM_BODY_LENGTH], privateKey)
 
 		case byte(ROOT_TYPE):
-			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
 				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+ROOT_BODY_LENGTH])
 			}
@@ -201,7 +202,7 @@ func UdpRead(conn net.PacketConn) {
 		case byte(DATUM_TYPE):
 			bodyLength := int(buf[LENGTH_FIRST_BYTE]) + int(buf[LENGTH_FIRST_BYTE+1])
 
-			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
 				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
 			}
@@ -209,7 +210,7 @@ func UdpRead(conn net.PacketConn) {
 		case byte(NO_DATUM_TYPE):
 			bodyLength := int(buf[LENGTH_FIRST_BYTE]) + int(buf[LENGTH_FIRST_BYTE+1])
 
-			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn)
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
 				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
 			}
@@ -218,7 +219,7 @@ func UdpRead(conn net.PacketConn) {
 	}
 }
 
-func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr, data []byte) bool {
+func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address *net.UDPAddr, data []byte, privateKey *ecdsa.PrivateKey) bool {
 	var datagram []byte
 	var responseOptions []int
 	var responseReceived bool
@@ -227,15 +228,15 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 
 	switch datagramType {
 	case HELLO_TYPE:
-		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION, privateKey)
 		responseOptions = append(responseOptions, HELLO_REPLAY_TYPE)
 	case HELLO_REPLAY_TYPE:
-		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION)
+		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION, privateKey)
 	case ROOT_REQUEST_TYPE:
-		datagram = RootRequestDatagram(datagramId)
+		datagram = RootRequestDatagram(datagramId, privateKey)
 		responseOptions = append(responseOptions, ROOT_TYPE)
 	case ROOT_TYPE:
-		datagram = RootDatagram(datagramId)
+		datagram = RootDatagram(datagramId, privateKey)
 	case GET_DATUM_TYPE:
 		datagram = GetDatumDatagram(datagramId, data)
 		responseOptions = append(responseOptions, NO_DATUM_TYPE, DATUM_TYPE)
@@ -328,14 +329,14 @@ func sliceContainsSession(slice []OpenSession, address string) int {
 	return -1
 }
 
-func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn net.PacketConn) int {
+func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn net.PacketConn, privateKey *ecdsa.PrivateKey) int {
 	for i, element := range slice {
 		if element.FullAddress.String() == address {
 			// After an hour the session is no longer valid
 			if time.Since(element.LastDatagramTime).Minutes() > 55 {
 				// We resend a Hello message, if we receive HelloReplay as a response
 				// (the write function will return true), we succeed in renewing the session
-				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, element.FullAddress, nil) {
+				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, element.FullAddress, nil, privateKey) {
 					return i
 				} else {
 					sessionsWeOpened = append(sessionsWeOpened[:i], sessionsWeOpened[i+1:]...) // We remove the session

@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"crypto/sha256"
+	"crypto/ecdsa"
+	"crypto/rand"
 )
 
 var JANUARY_1_2022 = time.Date(2022, 1, 1, 1, 0, 0, 0, time.Local) // January 1, 2022
@@ -11,7 +14,7 @@ var JANUARY_1_2022 = time.Date(2022, 1, 1, 1, 0, 0, 0, time.Local) // January 1,
 const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
 
 const DATAGRAM_MIN_LENGTH = 4 + 1 + 2 // For Id, Type, Length
-const SIGNATURE_LENGTH = 0
+const SIGNATURE_LENGTH = 64
 const HELLO_DATAGRAM_BODY_MIN_LENGTH = 4 + 1 // For Flags and Username Length
 
 const INTERNAL_NODE_DATAGRAM_MIN_LENGTH = 1     // For the Type field
@@ -65,7 +68,7 @@ func datagramGeneralStructure(datagramId []byte, datagramType int, datagramBodyL
 }
 
 /********************************************** HELLO, HELLO_REPLY **********************************************/
-func HelloDatagram(id string, userName string) []byte {
+func HelloDatagram(id string, userName string, privateKey *ecdsa.PrivateKey) []byte {
 	usernameLength := len(userName)
 	datagramBodyLength := HELLO_DATAGRAM_BODY_MIN_LENGTH + usernameLength
 	datagramLength := DATAGRAM_MIN_LENGTH + datagramBodyLength + SIGNATURE_LENGTH
@@ -75,12 +78,23 @@ func HelloDatagram(id string, userName string) []byte {
 
 	copy(datagram[7:11], []byte{0, 0, 0, 0})
 	datagram[11] = byte(usernameLength)
-	copy(datagram[12:], userName)
+	copy(datagram[12:12+usernameLength], userName)
+
+	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
+	if err != nil {
+		panic(err)
+	}
+	signature := make([]byte, 64)
+	r.FillBytes(signature[:32])
+	s.FillBytes(signature[32:])
+
+	copy(datagram[12+usernameLength:],signature)
 
 	return datagram
 }
 
-func HelloReplayDatagram(id string, userName string) []byte {
+func HelloReplayDatagram(id string, userName string, privateKey *ecdsa.PrivateKey) []byte {
 	usernameLength := len(userName)
 	datagramBodyLength := HELLO_DATAGRAM_BODY_MIN_LENGTH + usernameLength
 	datagramLength := DATAGRAM_MIN_LENGTH + datagramBodyLength + SIGNATURE_LENGTH
@@ -90,23 +104,58 @@ func HelloReplayDatagram(id string, userName string) []byte {
 
 	copy(datagram[7:11], []byte{0, 0, 0, 0})
 	datagram[11] = byte(usernameLength)
-	copy(datagram[12:], userName)
+	copy(datagram[12:12+usernameLength], userName)
+
+	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
+	if err != nil {
+		panic(err)
+	}
+	signature := make([]byte, 64)
+	r.FillBytes(signature[:32])
+	s.FillBytes(signature[32:])
+
+	copy(datagram[12+usernameLength:],signature)
 
 	return datagram
 }
 
 /********************************************** ROOT_REQUEST, ROOT **********************************************/
-func RootRequestDatagram(id string) []byte {
+func RootRequestDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_REQUEST_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), ROOT_REQUEST_TYPE, ROOT_REQUEST_BODY_LENGTH, datagramLength)
+
+	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
+	if err != nil {
+		panic(err)
+	}
+	signature := make([]byte, 64)
+	r.FillBytes(signature[:32])
+	s.FillBytes(signature[32:])
+
+	copy(datagram[datagramLength-SIGNATURE_LENGTH:],signature)
+
 	return datagram
 }
 
-func RootDatagram(id string) []byte {
+func RootDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), ROOT_TYPE, ROOT_BODY_LENGTH, datagramLength)
 
 	copy(datagram[BODY_FIRST_BYTE:], ThisPeerMerkleTree.Root.Hash)
+
+	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
+	r, s, err := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
+	if err != nil {
+		panic(err)
+	}
+	signature := make([]byte, 64)
+	r.FillBytes(signature[:32])
+	s.FillBytes(signature[32:])
+
+	copy(datagram[datagramLength-SIGNATURE_LENGTH:],signature)
+
 	return datagram
 }
 

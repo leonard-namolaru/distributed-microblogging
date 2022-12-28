@@ -10,6 +10,14 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"encoding/pem"
+	"crypto/x509"
+	"os"
+	"io/ioutil"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	cryptoRand "crypto/rand"
+	"encoding/base64"
 )
 
 type ServerRegistration struct {
@@ -31,6 +39,7 @@ type Address struct {
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
 const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
+const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION+"_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
 const UDP_LISTENING_ADDRESS = ":8081"
 
@@ -45,6 +54,58 @@ func main() {
 	/* A LIST OF MESSAGES AVAILABLE TO THE OTHER PEERS
 	 */
 	ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
+
+	/* KEY CRYPTOGRAPHY
+	*/
+
+	fileInfo, err := os.Stat(NAME_FILE_PRIVATE_KEY)
+    if err != nil || fileInfo.Size() == 0 {
+
+    	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptoRand.Reader)
+    	privateKeyDr, err := x509.MarshalECPrivateKey(privateKey)
+		if err != nil {
+			panic(err)
+		}
+		privPEM := pem.EncodeToMemory(
+			&pem.Block{
+				Type:  "EC PRIVATE KEY",
+				Bytes: privateKeyDr,
+			},
+		)
+
+		err = ioutil.WriteFile(NAME_FILE_PRIVATE_KEY, privPEM, 0644)
+		if err != nil {
+			panic(err)
+		}
+    }
+
+    data, err := ioutil.ReadFile(NAME_FILE_PRIVATE_KEY)
+	if err != nil {
+		panic(err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	lines = lines[1 : len(lines)-2]
+
+	privateKeyString := strings.Join(lines, "")
+
+	fmt.Printf("privateKeyString : %v\n", privateKeyString)
+
+	// créer la clé privée
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), bytes.NewReader([]byte(privateKeyString)))
+	if err != nil {
+		panic(err)
+	}
+
+	publicKey , _ := privateKey.Public().(*ecdsa.PublicKey)
+	publicKey64Bytes := make([]byte, 64)
+	publicKey.X.FillBytes(publicKey64Bytes[:32])
+	publicKey.Y.FillBytes(publicKey64Bytes[32:])
+	publicKeyEncoded := base64.RawStdEncoding.EncodeToString(publicKey64Bytes)
+
+	if DEBUG_MODE {
+		fmt.Printf("Our publicKey : %s\n", publicKeyEncoded)
+	}
 
 	/* STEP 1 : GET THE UDP ADDRESS OF THE SERVER
 	 *  HTTP GET to /udp-address followed by a JSON decode.
@@ -68,7 +129,7 @@ func main() {
 	/* STEP 2 : SERVER REGISTRATION
 	 *  A POST REQUEST TO /register
 	 */
-	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: ""}
+	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: publicKeyEncoded}
 	jsonEncoding, err := json.Marshal(serverRegistration)
 	if err != nil {
 		log.Fatalf("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
@@ -82,7 +143,12 @@ func main() {
 	 * IF A GET TO THIS URL RETURNS 404, THE SERVER DOES NOT SIGN ITS MESSAGES.
 	 */
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
-	httpResponseBody, _ = HttpRequest("GET", httpClient, requestUrl.String(), nil)
+	publicKeyFromServerBytes, _ := HttpRequest("GET", httpClient, requestUrl.String(), nil)
+	publicKeyFromServerString := base64.RawStdEncoding.EncodeToString(publicKeyFromServerBytes)
+
+	if DEBUG_MODE {
+		fmt.Printf("public Key from server : %s\n", publicKeyFromServerString)
+	}
 
 	/* STEP 4 : HELLO TO EACH OF THE ADDRESSES OBTAINED IN STEP 1
 	 */
@@ -97,7 +163,7 @@ func main() {
 	log.Printf("LISTENING TO %s \n", UDP_LISTENING_ADDRESS)
 
 	// The reading of the received datagrams is done in a separate thread
-	go UdpRead(conn)
+	go UdpRead(conn, privateKey)
 
 	for _, address := range serverUdpAddresses {
 		var full_address string
@@ -112,7 +178,7 @@ func main() {
 			panic(err)
 		}
 
-		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
+		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
 	}
 
 	/* STEP 5 : LIST OF PEERS KNOWN TO THE SERVER
@@ -175,7 +241,7 @@ func main() {
 					panic(err)
 				}
 
-				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil)
+				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
 			}
 		}
 	}
@@ -185,7 +251,7 @@ func main() {
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
 		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
-			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil)
+			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil, privateKey)
 		}
 	}
 
@@ -193,10 +259,10 @@ func main() {
 	 */
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if len(sessionsWeOpened[i].buffer) != 0 {
-			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0])
+			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0], privateKey)
 			if writeResult {
 
-				getDatumResult := getDatum(conn, i, datagram_id)
+				getDatumResult := getDatum(conn, i, datagram_id, privateKey)
 				if getDatumResult || true {
 					var messages [][]byte
 
@@ -227,7 +293,7 @@ func checkHash(hash []byte, data []byte) bool {
 	return true
 }
 
-func getDatum(conn net.PacketConn, sessionIndex int, datagramId string) bool {
+func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	bufferIndex := len(sessionsWeOpened[sessionIndex].buffer) - 1
 	datagramBody := sessionsWeOpened[sessionIndex].buffer[bufferIndex]
 	hash := datagramBody[0:HASH_LENGTH]
@@ -252,9 +318,9 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string) bool {
 	for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
 		hashI := datagramBody[i : i+HASH_LENGTH]
 
-		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI)
+		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI, privateKey)
 		if writeResult {
-			getDatum(conn, sessionIndex, datagramId)
+			getDatum(conn, sessionIndex, datagramId, privateKey)
 		} else {
 			return false
 		}
