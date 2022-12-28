@@ -278,7 +278,7 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		if waitForResponse {
 			time.Sleep(time.Duration(timeOut * float64(time.Second)))
 			mutex.Lock()
-			if sliceContainsAddress(waitingResponses, waitingResponse.FullAddress.String()) == -1 {
+			if sliceContainsAddress(waitingResponses, address.String()) == -1 {
 				responseReceived = true
 			} else {
 				if i == 3 && DEBUG_MODE {
