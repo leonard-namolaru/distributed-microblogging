@@ -9,6 +9,16 @@ import (
 
 const NODE_TYPE_INTERNAL = 1
 
+const NODE_TYPE_BYTE = 0
+const MESSAGE_DATE_FIRST_BYTE = 1
+const MESSAGE_DATE_LENGTH = 4
+const MESSAGE_IN_REPLY_TO_FIRST_BYTE = 5
+const MESSAFE_IN_REPLY_TO_LENGTH = 32
+const MESSAFE_LENGTH_FIRST_BYTE = 37
+const MESSAGE_LENGTH_LENGTH = 2
+const MESSAGE_BODY_FIRST_BYTE = 39
+const MESSAGE_TOTAL_MIN_LENGTH = 1 + MESSAGE_DATE_LENGTH + MESSAFE_IN_REPLY_TO_LENGTH + MESSAGE_LENGTH_LENGTH // 1 for the type byte
+
 type MerkleNode struct {
 	ParentNode *MerkleNode   // Pointer to the parent node
 	Children   []*MerkleNode // A table of pointers to the child nodes
@@ -21,6 +31,8 @@ type MerkleTree struct {
 	Root     *MerkleNode // Pointer to the root node
 	MaxArity int         // The maximum number of children of each node
 }
+
+var JANUARY_1_2022 = time.Date(2022, 1, 1, 1, 0, 0, 0, time.Local) // January 1, 2022
 
 /* A function that receives a list of messages as well as the maximum number of children in each node,
  * and returns a pointer to a Merkel tree containing all these messages.

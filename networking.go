@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
+
 type WaitingResponse struct {
 	FullAddress   *net.UDPAddr
 	DatagramTypes []int
@@ -37,18 +39,6 @@ type DepthFirstSearchBuffer struct {
 	FullAddress net.UDPAddr
 	Buffer      [][]byte
 }
-
-const ERROR_TYPE = 254
-
-const HELLO_TYPE = 0
-const HELLO_REPLAY_TYPE = 128
-
-const ROOT_REQUEST_TYPE = 1
-const ROOT_TYPE = 129
-
-const GET_DATUM_TYPE = 2
-const DATUM_TYPE = 130
-const NO_DATUM_TYPE = 131
 
 var waitingResponses []WaitingResponse
 var openSessions []OpenSession
@@ -190,7 +180,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
-			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLAY_TYPE, udpAddress, nil, privateKey)
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLY_TYPE, udpAddress, nil, privateKey)
 			openSession := &OpenSession{FullAddress: udpAddress, LastDatagramTime: time.Now()}
 			openSessions = append(openSessions, *openSession)
 
@@ -234,10 +224,10 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 
 	switch datagramType {
 	case HELLO_TYPE:
-		datagram = HelloDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION, privateKey)
-		responseOptions = append(responseOptions, HELLO_REPLAY_TYPE)
-	case HELLO_REPLAY_TYPE:
-		datagram = HelloReplayDatagram(datagramId, NAME_FOR_SERVER_REGISTRATION, privateKey)
+		datagram = HelloOrHelloReplyDatagram(true, datagramId, NAME_FOR_SERVER_REGISTRATION, privateKey)
+		responseOptions = append(responseOptions, HELLO_REPLY_TYPE)
+	case HELLO_REPLY_TYPE:
+		datagram = HelloOrHelloReplyDatagram(false, datagramId, NAME_FOR_SERVER_REGISTRATION, privateKey)
 	case ROOT_REQUEST_TYPE:
 		datagram = RootRequestDatagram(datagramId, privateKey)
 		responseOptions = append(responseOptions, ROOT_TYPE)
