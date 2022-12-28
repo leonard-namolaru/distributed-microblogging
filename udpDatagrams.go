@@ -206,8 +206,7 @@ func ErrorDatagram(id string, errorMessage []byte) []byte {
 func PrintDatagram(isDatagramWeSent bool, address string, datagram []byte, timeOut float64) {
 	var str string
 	str = ""
-
-	bodyLength := int(datagram[5]) + int(datagram[6])
+	bodyLength := int(datagram[LENGTH_FIRST_BYTE])<<8 | int(datagram[LENGTH_FIRST_BYTE+1])
 	id := datagram[ID_FIRST_BYTE : ID_FIRST_BYTE+ID_LENGTH]
 	datagramType := datagram[TYPE_BYTE]
 

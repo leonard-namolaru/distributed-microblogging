@@ -51,7 +51,7 @@ func main() {
 
 	httpClient := CreateHttpClient()
 
-	/* A LIST OF MESSAGES AVAILABLE TO THE OTHER PEERS
+	/* A LIST OF MESSAGES AVAILABLE FOR THE OTHER PEERS
 	 */
 	ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
 
@@ -158,8 +158,10 @@ func main() {
 	// func net.Dial(network string, address string) (net.Conn, error)
 	conn, errorMessage := net.ListenPacket("udp", UDP_LISTENING_ADDRESS)
 	if errorMessage != nil {
-		log.Fatalf("The method net.ListenUDP() failed in sendUdp() to address : %v\n", errorMessage)
+		log.Fatalf("The method net.ListenPacket() failed with %s address : %v\n", UDP_LISTENING_ADDRESS, errorMessage)
 	}
+
+	fmt.Println()
 	log.Printf("LISTENING TO %s \n", UDP_LISTENING_ADDRESS)
 
 	// The reading of the received datagrams is done in a separate thread
@@ -175,7 +177,7 @@ func main() {
 		}
 		serverAddr, err := net.ResolveUDPAddr("udp", full_address)
 		if err != nil {
-			panic(err)
+			log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 		}
 
 		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
@@ -238,7 +240,7 @@ func main() {
 				}
 				serverAddr, err := net.ResolveUDPAddr("udp", full_address)
 				if err != nil {
-					panic(err)
+					log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 				}
 
 				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
@@ -251,7 +253,11 @@ func main() {
 	for _, session := range sessionsWeOpened {
 		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
 		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
+<<<<<<< HEAD
 			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil, privateKey)
+=======
+			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, &session.FullAddress, nil)
+>>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 		}
 	}
 
@@ -259,7 +265,11 @@ func main() {
 	 */
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if len(sessionsWeOpened[i].buffer) != 0 {
+<<<<<<< HEAD
 			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0], privateKey)
+=======
+			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, &sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0])
+>>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 			if writeResult {
 
 				getDatumResult := getDatum(conn, i, datagram_id, privateKey)
@@ -282,7 +292,7 @@ func main() {
 	}
 
 	fmt.Println()
-	fmt.Printf("...\n")
+	fmt.Printf("WAITING FOR NEW MESSAGES ...\n")
 
 	for {
 	}
@@ -299,7 +309,7 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateK
 	hash := datagramBody[0:HASH_LENGTH]
 
 	if HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE < len(datagramBody) {
-		messageLength := int(datagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE]) + int(datagramBody[HASH_LENGTH+MESSAFE_LENGTH_FIRST_BYTE+1])
+		messageLength := int(datagramBody[HASH_LENGTH+LENGTH_FIRST_BYTE])<<8 | int(datagramBody[HASH_LENGTH+LENGTH_FIRST_BYTE+1])
 		messageBody := datagramBody[HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE:]
 		if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == 0 || messageLength == len(messageBody) {
 			return true
@@ -318,7 +328,11 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateK
 	for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
 		hashI := datagramBody[i : i+HASH_LENGTH]
 
+<<<<<<< HEAD
 		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI, privateKey)
+=======
+		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, &sessionsWeOpened[sessionIndex].FullAddress, hashI)
+>>>>>>> 3289077b1b0d1a540b0995ca8b3a6cd61fed2d63
 		if writeResult {
 			getDatum(conn, sessionIndex, datagramId, privateKey)
 		} else {
