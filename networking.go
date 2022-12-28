@@ -35,11 +35,6 @@ type SessionWeOpened struct {
 	BufferIndex      int
 }
 
-type DepthFirstSearchBuffer struct {
-	FullAddress net.UDPAddr
-	Buffer      [][]byte
-}
-
 var waitingResponses []WaitingResponse
 var openSessions []OpenSession
 var sessionsWeOpened []SessionWeOpened

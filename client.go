@@ -15,6 +15,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
@@ -43,6 +44,7 @@ const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION + "_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
 const UDP_LISTENING_ADDRESS = ":8081"
 
+var peers []Peer
 var ThisPeerMerkleTree = CreateTree(CreateMessagesForMerkleTree(33), MERKLE_TREE_MAX_ARITY)
 
 func main() {
@@ -184,25 +186,100 @@ func main() {
 		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
 	}
 
-	/* LIST OF PEERS KNOWN TO THE SERVER
-	 * A GET REQUEST TO THE URL /peers.
-	 * THE SERVER RESPONDS WITH THE BODY CONTAINING A LIST OF PEER NAMES, ONE PER LINE.
-	 */
-	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
-	httpResponseBody, _ = HttpRequest("GET", httpClient, requestUrl.String(), nil, "%s")
+	fmt.Println()
+	fmt.Printf("WAITING FOR NEW MESSAGES ...\n")
 
-	/* PEER ADDRESSES
-	 * TO LOCATE A PEER NAMED p, THE CLIENT MAKES A GET REQUEST TO THE URL /peers/p.
-	 * THE RESPONSE BODY CONTAINS A JSON OBJECT
-	 */
-	var peers []Peer
+	var choise string
+	var peersKnownToServer []byte = nil
 
-	bodyAfterSplit := strings.Split(string(httpResponseBody), "\n")
+	fmt.Println()
+	printMenu()
+	for {
+		fmt.Scanln(&choise)
+		switch choise[0] {
+		case 'a':
+			fmt.Println()
+			fmt.Println("LIST OF PEERS KNOWN TO THE SERVER : ")
+			peersKnownToServer = getListPeersKnownToServer(httpClient)
+		case 'b':
+			var peerName string
+			fmt.Println()
+			fmt.Println("PEER ADDRESSES : ")
+			fmt.Println("Enter peer name : ")
+			fmt.Scanln(&peerName)
+			if !getPeerAddresses(httpClient, peersKnownToServer, peerName) {
+				fmt.Printf("The addresses of the peer %s could not be obtained \n", peerName)
+			}
+		case 'c':
+			var peerAddress string
+			fmt.Println()
+			fmt.Println("SEND HELLO TO PEER ADDRESS : ")
+			fmt.Println("Enter peer address : ")
+			fmt.Scanln(&peerAddress)
+			if !helloToPeerAddress(conn, peerAddress, datagram_id, privateKey) {
+				fmt.Printf("The address %s you specified was not found in the list of addresses of the peers known to the client \n", peerAddress)
+			}
+
+		case 'd':
+			var peerAddress string
+			fmt.Println()
+			fmt.Println("ROOT REQUEST TO A OPENED SESSION : ")
+			fmt.Println("Enter peer address : ")
+			fmt.Scanln(&peerAddress)
+			if !rootRequestToOpenedSession(conn, peerAddress, datagram_id, privateKey) {
+				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions \n", peerAddress)
+			}
+		case 'e':
+			var peerAddress string
+			fmt.Println()
+			fmt.Println("OBTAIN THE MERKLE TREE FROM ANOTHER PEER WHO GAVE US THE HASH OF ROOT : ")
+			fmt.Println("Enter peer address : ")
+			fmt.Scanln(&peerAddress)
+			if !getMerkleTreeAnotherPeer(conn, peerAddress, datagram_id, privateKey) {
+				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have the hash of the root  \n", peerAddress)
+			}
+		case 'f':
+			os.Exit(0)
+		default:
+			fmt.Println()
+			fmt.Printf("Invalid command  \n")
+			printMenu()
+		}
+	}
+
+}
+
+func printMenu() {
+	fmt.Println("----- MENU -----")
+	fmt.Println("a - List of peers known to the server")
+	fmt.Println("b - Get peer addresses")
+	fmt.Println("c - Send Hello to peer address")
+	fmt.Println("e - Obtain the merkle tree from another peer who gave us the hash of root")
+	fmt.Println("f - Quit")
+}
+
+/* List of peers known to the server
+ * A get request to the url /peers.
+ * The server responds with the body containing a list of peer names, one per line.
+ */
+func getListPeersKnownToServer(client *http.Client) []byte {
+	requestUrl := url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
+	httpResponseBody, _ := HttpRequest("GET", client, requestUrl.String(), nil, "%s")
+	return httpResponseBody
+}
+
+/* Peer addresses
+ * To locate a peer named p, the client makes a get request to the url /peers/p.
+ * The response body contains a json object
+ */
+func getPeerAddresses(client *http.Client, peersKnownToServer []byte, peerName string) bool {
+	requestUrl := url.URL{Scheme: "https", Host: HOST, Path: "/peers"}
+	bodyAfterSplit := strings.Split(string(peersKnownToServer), "\n")
+
 	for _, p := range bodyAfterSplit {
-
-		if len(p) != 0 {
+		if peerName == p {
 			peerUrl := requestUrl.String() + "/" + p
-			bodyfromPeer, statusCode := HttpRequest("GET", httpClient, peerUrl, nil, "%s")
+			bodyfromPeer, statusCode := HttpRequest("GET", client, peerUrl, nil, "%s")
 
 			if statusCode == 200 {
 				var peer Peer
@@ -212,7 +289,6 @@ func main() {
 				}
 
 				peers = append(peers, peer)
-
 				if DEBUG_MODE {
 					fmt.Printf("Peer key : %s\n", peer.Key)
 
@@ -221,76 +297,85 @@ func main() {
 						fmt.Printf("Peer port %d : %d\n", i+1, address.Port)
 					}
 				}
-			}
 
+				return true
+			}
 		}
 	}
 
-	/* HELLO TO (ALL) PEER ADDRESSES
-	 */
-	for _, peer := range peers {
-		if peer.Username == "jch" || peer.Username == "bet" {
-			for _, address := range peer.Adresses {
-				var full_address string
+	return false
+}
 
+/*
+ *
+ */
+func helloToPeerAddress(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
+	for _, peer := range peers {
+		for _, address := range peer.Adresses {
+			var full_address string
+			if peerAddress == fmt.Sprintf("%s:%v", address.Ip, address.Port) {
 				if net.ParseIP(address.Ip).To4() == nil {
 					full_address = fmt.Sprintf("[%v]:%v", address.Ip, address.Port)
-
 				} else {
 					full_address = fmt.Sprintf("%v:%v", address.Ip, address.Port)
 				}
 				serverAddr, err := net.ResolveUDPAddr("udp", full_address)
 				if err != nil {
-					log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
+					log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, err)
 				}
 
-				UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
+				UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, privateKey)
+				return true
 			}
 		}
 	}
+	return false
+}
 
-	/* ROOT REQUEST TO ALL THE SESSIONS WE OPENED
-	 */
+/*
+ *
+ */
+func rootRequestToOpenedSession(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	for _, session := range sessionsWeOpened {
-		// We also have an open session with the server but we are now interested in contacting only the peers with whom we created a session.
-		if session.FullAddress.IP.String() != serverUdpAddresses[0].Ip && session.FullAddress.Port != int(serverUdpAddresses[0].Port) || (session.FullAddress.IP.String() != serverUdpAddresses[1].Ip && session.FullAddress.Port != int(serverUdpAddresses[1].Port)) {
-			UdpWrite(conn, datagram_id, ROOT_REQUEST_TYPE, session.FullAddress, nil, privateKey)
+		if peerAddress == session.FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", session.FullAddress.IP.String(), session.FullAddress.Port) {
+			UdpWrite(conn, datagramId, ROOT_REQUEST_TYPE, session.FullAddress, nil, privateKey)
+			return true
 		}
 	}
+	return false
+}
 
-	/* OBTAINING THE MERKLE TREE FROM ALL THE PEERS WHO GAVE US THE HASH OF THEIR ROOT
-	 */
+/*
+ *
+ */
+func getMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	for i := 0; i < len(sessionsWeOpened); i++ {
-		if len(sessionsWeOpened[i].buffer) != 0 {
-			writeResult := UdpWrite(conn, datagram_id, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0], privateKey)
-			if writeResult {
+		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
+			if len(sessionsWeOpened[i].buffer) != 0 {
+				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0], privateKey)
+				if writeResult {
 
-				getDatumResult := getDatum(conn, i, datagram_id, privateKey)
-				if getDatumResult || true {
-					var messages [][]byte
+					getDatumResult := getDatum(conn, i, datagramId, privateKey)
+					if getDatumResult || true {
+						var messages [][]byte
 
-					// We start from index 1 because the hash of the root is stored in index 0 (we have already used the hash of the root)
-					for j := 1; j < len(sessionsWeOpened[i].buffer); j++ {
+						// We start from index 1 because the hash of the root is stored in index 0 (we have already used the hash of the root)
+						for j := 1; j < len(sessionsWeOpened[i].buffer); j++ {
 
-						if int(sessionsWeOpened[i].buffer[j][HASH_LENGTH+NODE_TYPE_BYTE]) == 0 {
-							messages = append(messages, sessionsWeOpened[i].buffer[j][HASH_LENGTH:])
+							if int(sessionsWeOpened[i].buffer[j][HASH_LENGTH+NODE_TYPE_BYTE]) == 0 {
+								messages = append(messages, sessionsWeOpened[i].buffer[j][HASH_LENGTH:])
+							}
 						}
-					}
 
-					sessionsWeOpened[i].Merkle = CreateTree(messages, MERKLE_TREE_MAX_ARITY)
-					sessionsWeOpened[i].Merkle.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
+						sessionsWeOpened[i].Merkle = CreateTree(messages, MERKLE_TREE_MAX_ARITY)
+						sessionsWeOpened[i].Merkle.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
+						return true
+					}
 				}
 			}
 		}
-
 	}
-
-	fmt.Println()
-	fmt.Printf("WAITING FOR NEW MESSAGES ...\n")
-
-	for {
-	}
-
+	return false
 }
 
 func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateKey *ecdsa.PrivateKey) bool {
