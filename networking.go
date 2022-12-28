@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +12,6 @@ import (
 	"net/http"
 	"sync"
 	"time"
-	"crypto/ecdsa"
 )
 
 type WaitingResponse struct {
@@ -26,7 +26,7 @@ type OpenSession struct {
 }
 
 type SessionWeOpened struct {
-	FullAddress      net.UDPAddr
+	FullAddress      *net.UDPAddr
 	LastDatagramTime time.Time
 	Merkle           *MerkleTree
 	buffer           [][]byte
@@ -154,7 +154,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := SessionWeOpened{FullAddress: *udpAddress, LastDatagramTime: time.Now(), Merkle: nil}
+						sessionWeOpened := SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil}
 						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
 				}
