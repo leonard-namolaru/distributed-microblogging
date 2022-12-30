@@ -355,25 +355,11 @@ func rootRequestToOpenedSession(conn net.PacketConn, peerAddress string, datagra
 func getMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
-			sessionsWeOpenedLengthBefore := len(sessionsWeOpened[i].buffer)
-			if sessionsWeOpenedLengthBefore != 0 && len(sessionsWeOpened[i].buffer[sessionsWeOpenedLengthBefore-1]) == HASH_LENGTH {
-				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[sessionsWeOpenedLengthBefore-1], privateKey)
+			if sessionsWeOpened[i].PendingRootHash != nil && len(sessionsWeOpened[i].PendingRootHash) == HASH_LENGTH {
+				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].PendingRootHash, privateKey)
 				if writeResult {
-
 					getDatumResult := getDatum(conn, i, datagramId, privateKey)
 					if getDatumResult || true {
-						var messages [][]byte
-
-						// We start from index sessionsWeOpenedLength because the hash of the root is stored in index (sessionsWeOpenedLength - 1) (we have already used the hash of the root)
-						for j := sessionsWeOpenedLengthBefore; j < len(sessionsWeOpened[i].buffer); j++ {
-
-							if int(sessionsWeOpened[i].buffer[j][HASH_LENGTH+NODE_TYPE_BYTE]) == 0 {
-								messages = append(messages, sessionsWeOpened[i].buffer[j][HASH_LENGTH:])
-							}
-						}
-
-						sessionsWeOpened[i].Merkle = CreateTree(messages, MERKLE_TREE_MAX_ARITY)
-						sessionsWeOpened[i].Merkle.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
 						return true
 					}
 				}
@@ -384,34 +370,39 @@ func getMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramI
 }
 
 func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateKey *ecdsa.PrivateKey) bool {
-	bufferIndex := len(sessionsWeOpened[sessionIndex].buffer) - 1
-	datagramBody := sessionsWeOpened[sessionIndex].buffer[bufferIndex]
+	datagramBody := sessionsWeOpened[sessionIndex].PendingRootHash
 	hash := datagramBody[0:HASH_LENGTH]
 
-	if HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE < len(datagramBody) {
-		messageLength := int(datagramBody[HASH_LENGTH+LENGTH_FIRST_BYTE])<<8 | int(datagramBody[HASH_LENGTH+LENGTH_FIRST_BYTE+1])
-		messageBody := datagramBody[HASH_LENGTH+MESSAGE_BODY_FIRST_BYTE:]
-		if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == 0 || messageLength == len(messageBody) {
-			return true
-		}
-	}
-
 	if len(datagramBody) == HASH_LENGTH {
-		sessionsWeOpened[sessionIndex].buffer = append(sessionsWeOpened[sessionIndex].buffer[:bufferIndex], sessionsWeOpened[sessionIndex].buffer[bufferIndex+1:]...) // We remove the session
 		return false
 	}
 
-	if !CheckHash(hash, datagramBody[HASH_LENGTH:]) {
+	if !sessionsWeOpened[sessionIndex].Merkle.AddNode(hash, datagramBody[HASH_LENGTH:]) {
 		return false
 	}
 
-	for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
-		hashI := datagramBody[i : i+HASH_LENGTH]
-		writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI, privateKey)
-		if writeResult {
-			getDatum(conn, sessionIndex, datagramId, privateKey)
-		} else {
-			return false
+	sessionsWeOpened[sessionIndex].Merkle.DepthFirstSearch(0, sessionsWeOpened[sessionIndex].Merkle.PrintNodesData, nil)
+
+	if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == NODE_TYPE_MESSAGE {
+		return true
+	}
+
+	if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == NODE_TYPE_INTERNAL {
+
+		for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
+
+			hashI := datagramBody[i : i+HASH_LENGTH]
+
+			if sessionsWeOpened[sessionIndex].Merkle.DepthFirstSearch(0, sessionsWeOpened[sessionIndex].Merkle.GetNodeByHash, hashI) == nil {
+
+				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI, privateKey)
+				if writeResult {
+
+					getDatum(conn, sessionIndex, datagramId, privateKey)
+				} else {
+					return false
+				}
+			}
 		}
 	}
 

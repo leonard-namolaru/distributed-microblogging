@@ -50,6 +50,71 @@ func CreateTree(messages [][]byte, maxArity int) *MerkleTree {
 	return &merkleTree
 }
 
+func CreateEmptyTree(maxArity int) *MerkleTree {
+	var merkleTree MerkleTree
+	merkleTree.MaxArity = maxArity
+
+	root := &MerkleNode{ParentNode: nil, Hash: []byte{}, Data: nil}
+	merkleTree.Root = root
+
+	return &merkleTree
+}
+
+func (merkleTree *MerkleTree) AddNode(hash []byte, nodeData []byte) bool {
+
+	if !CheckHash(hash, nodeData) {
+		return false
+	}
+
+	node := merkleTree.DepthFirstSearch(0, merkleTree.SearchParent, hash)
+	if node != nil {
+		if len(node.Children) < merkleTree.MaxArity {
+
+			node.Children = append(node.Children, &MerkleNode{
+				Hash:       hash,
+				Children:   nil,
+				ParentNode: node,
+				Data:       nodeData,
+			})
+		} else {
+			return false
+		}
+	} else {
+		merkleTree.Root.Hash = hash
+		merkleTree.Root.Data = nodeData
+
+		if merkleTree.Root.Data[NODE_TYPE_BYTE] == NODE_TYPE_INTERNAL {
+			for i := 0; i < len(merkleTree.Root.Children); i++ {
+				hashChild := fmt.Sprintf("%x", merkleTree.Root.Children[i].Hash)
+				hashFoundInParentNode := false
+				for j := NODE_TYPE_BYTE + 1; j < len(merkleTree.Root.Data) && !hashFoundInParentNode; j += HASH_LENGTH {
+					nodeHashString := fmt.Sprintf("%x", merkleTree.Root.Data[j:j+HASH_LENGTH])
+
+					if hashChild == nodeHashString {
+						hashFoundInParentNode = true
+					}
+				}
+
+				if !hashFoundInParentNode {
+					if i < len(merkleTree.Root.Children)-1 {
+						merkleTree.Root.Children = append(merkleTree.Root.Children[:i], merkleTree.Root.Children[i+1:]...)
+					} else {
+						fmt.Printf("Test %d \n", len(merkleTree.Root.Children))
+						if len(merkleTree.Root.Children)-1 == 0 {
+							merkleTree.Root.Children = []*MerkleNode{}
+						} else {
+							merkleTree.Root.Children = merkleTree.Root.Children[:i]
+						}
+					}
+				}
+			}
+		}
+
+	}
+
+	return true
+}
+
 /* Internal function. This function receives a list messages and returns leaves for those messages
  * (list of leaf pointers).
  */
@@ -142,6 +207,10 @@ func (merkleTree *MerkleTree) DepthFirstSearch(nodesHeightCountInitialization in
 		return merkleNode
 	}
 
+	if len(merkleNode.Data) == 0 {
+		return nil
+	}
+
 	if merkleNode.Data[NODE_TYPE_BYTE] != NODE_TYPE_INTERNAL {
 		return nil
 	}
@@ -157,6 +226,22 @@ func (merkleTree *MerkleTree) DepthFirstSearch(nodesHeightCountInitialization in
 }
 
 /******************************************************************************************/
+func (merkleTree *MerkleTree) SearchParent(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	hashSearchString := fmt.Sprintf("%x", hashSearch)
+
+	if len(merkleNode.Data) != 0 && merkleNode.Data[NODE_TYPE_BYTE] == NODE_TYPE_INTERNAL {
+		for i := NODE_TYPE_BYTE + 1; i < len(merkleNode.Data); i += HASH_LENGTH {
+			nodeHashString := fmt.Sprintf("%x", merkleNode.Data[i:i+HASH_LENGTH])
+
+			if hashSearchString == nodeHashString {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func (merkleTree *MerkleTree) GetNodeByHash(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
 	nodeHashString := fmt.Sprintf("%x", merkleNode.Hash)
 	hashSearchString := fmt.Sprintf("%x", hashSearch)

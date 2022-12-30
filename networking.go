@@ -33,6 +33,7 @@ type SessionWeOpened struct {
 	Merkle           *MerkleTree
 	buffer           [][]byte
 	BufferIndex      int
+	PendingRootHash  []byte
 }
 
 var waitingResponses []WaitingResponse
@@ -139,7 +140,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil}
+						sessionWeOpened := SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil, PendingRootHash: nil}
 						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
 				}
@@ -186,8 +187,31 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 		case byte(ROOT_TYPE):
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
+			rootHash := buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+ROOT_BODY_LENGTH]
 			if i != -1 {
-				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+ROOT_BODY_LENGTH])
+				if sessionsWeOpened[i].Merkle == nil {
+					if DEBUG_MODE {
+						fmt.Println()
+						fmt.Printf("So far we have not created a Merkle tree for this session. We create a Merkle tree now. \n")
+					}
+					sessionsWeOpened[i].Merkle = CreateEmptyTree(MERKLE_TREE_MAX_ARITY)
+					sessionsWeOpened[i].PendingRootHash = rootHash
+				} else {
+					if fmt.Sprintf("%x", rootHash) == fmt.Sprintf("%x", sessionsWeOpened[i].Merkle.Root.Hash) {
+						if DEBUG_MODE {
+							fmt.Println()
+							fmt.Printf("The root we got is the same as the root that was stored so far in the Merkle tree for this session. \n")
+						}
+					} else {
+						if DEBUG_MODE {
+							fmt.Println()
+							fmt.Print("The root we got is not the same as the root that was stored so far in the Merkle tree for this session. We will save the new hash in a buffer until we get the node that this hash represents.\n")
+							fmt.Print("If the hash matches the node, we will replace the root of the Merkel tree. \n")
+						}
+						sessionsWeOpened[i].PendingRootHash = rootHash
+					}
+				}
+
 			}
 
 		case byte(DATUM_TYPE):
@@ -195,7 +219,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
-				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+				sessionsWeOpened[i].PendingRootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
 			}
 
 		case byte(NO_DATUM_TYPE):
@@ -203,7 +227,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
-				sessionsWeOpened[i].buffer = append(sessionsWeOpened[i].buffer, buf[BODY_FIRST_BYTE:BODY_FIRST_BYTE+bodyLength])
+				sessionsWeOpened[i].PendingRootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
 			}
 
 		}
