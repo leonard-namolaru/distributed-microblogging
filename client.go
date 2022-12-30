@@ -53,10 +53,6 @@ func main() {
 
 	httpClient := CreateHttpClient()
 
-	/* A LIST OF MESSAGES AVAILABLE FOR THE OTHER PEERS
-	 */
-	ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
-
 	/* KEY CRYPTOGRAPHY
 	 */
 
@@ -192,9 +188,10 @@ func main() {
 	var choise string
 	var peersKnownToServer []byte = nil
 
-	fmt.Println()
-	printMenu()
 	for {
+		fmt.Println()
+		printMenu()
+		fmt.Println("Your choise : ")
 		fmt.Scanln(&choise)
 		switch choise[0] {
 		case 'a':
@@ -237,25 +234,32 @@ func main() {
 			fmt.Scanln(&peerAddress)
 			if !getMerkleTreeAnotherPeer(conn, peerAddress, datagram_id, privateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have the hash of the root  \n", peerAddress)
+				fmt.Printf("Another option is that you have previously received the Merkle tree of this peer. Therefore, before trying again, you must first request the root again  \n")
 			}
 		case 'f':
+			ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
+		case 'g':
 			os.Exit(0)
 		default:
 			fmt.Println()
 			fmt.Printf("Invalid command  \n")
-			printMenu()
 		}
 	}
 
 }
 
 func printMenu() {
-	fmt.Println("----- MENU -----")
-	fmt.Println("a - List of peers known to the server")
-	fmt.Println("b - Get peer addresses")
-	fmt.Println("c - Send Hello to peer address")
-	fmt.Println("e - Obtain the merkle tree from another peer who gave us the hash of root")
-	fmt.Println("f - Quit")
+	str := ""
+	str += fmt.Sprintln("----- MENU -----")
+	str += fmt.Sprintln("a - List of peers known to the server")
+	str += fmt.Sprintln("b - Get peer addresses")
+	str += fmt.Sprintln("c - Send Hello to peer address")
+	str += fmt.Sprintln("d - Root request to a opened session")
+	str += fmt.Sprintln("e - Obtain the merkle tree from another peer who gave us the hash of root")
+	str += fmt.Sprintln("f - Print our peer's Merkle tree")
+	str += fmt.Sprintln("g - Quit")
+
+	fmt.Printf(str)
 }
 
 /* List of peers known to the server
@@ -351,16 +355,17 @@ func rootRequestToOpenedSession(conn net.PacketConn, peerAddress string, datagra
 func getMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
-			if len(sessionsWeOpened[i].buffer) != 0 {
-				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[0], privateKey)
+			sessionsWeOpenedLengthBefore := len(sessionsWeOpened[i].buffer)
+			if sessionsWeOpenedLengthBefore != 0 && len(sessionsWeOpened[i].buffer[sessionsWeOpenedLengthBefore-1]) == HASH_LENGTH {
+				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].buffer[sessionsWeOpenedLengthBefore-1], privateKey)
 				if writeResult {
 
 					getDatumResult := getDatum(conn, i, datagramId, privateKey)
 					if getDatumResult || true {
 						var messages [][]byte
 
-						// We start from index 1 because the hash of the root is stored in index 0 (we have already used the hash of the root)
-						for j := 1; j < len(sessionsWeOpened[i].buffer); j++ {
+						// We start from index sessionsWeOpenedLength because the hash of the root is stored in index (sessionsWeOpenedLength - 1) (we have already used the hash of the root)
+						for j := sessionsWeOpenedLengthBefore; j < len(sessionsWeOpened[i].buffer); j++ {
 
 							if int(sessionsWeOpened[i].buffer[j][HASH_LENGTH+NODE_TYPE_BYTE]) == 0 {
 								messages = append(messages, sessionsWeOpened[i].buffer[j][HASH_LENGTH:])
