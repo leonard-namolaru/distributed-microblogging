@@ -96,16 +96,7 @@ func (merkleTree *MerkleTree) AddNode(hash []byte, nodeData []byte) bool {
 				}
 
 				if !hashFoundInParentNode {
-					if i < len(merkleTree.Root.Children)-1 {
-						merkleTree.Root.Children = append(merkleTree.Root.Children[:i], merkleTree.Root.Children[i+1:]...)
-					} else {
-						fmt.Printf("Test %d \n", len(merkleTree.Root.Children))
-						if len(merkleTree.Root.Children)-1 == 0 {
-							merkleTree.Root.Children = []*MerkleNode{}
-						} else {
-							merkleTree.Root.Children = merkleTree.Root.Children[:i]
-						}
-					}
+					merkleTree.Root.Children = append(merkleTree.Root.Children[:i], merkleTree.Root.Children[i+1:]...)
 				}
 			}
 		}

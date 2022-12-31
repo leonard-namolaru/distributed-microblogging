@@ -23,17 +23,15 @@ type WaitingResponse struct {
 }
 
 type OpenSession struct {
-	FullAddress      *net.UDPAddr
-	LastDatagramTime time.Time
+	FullAddress       *net.UDPAddr
+	LastHandshakeTime time.Time
 }
 
 type SessionWeOpened struct {
 	FullAddress      *net.UDPAddr
 	LastDatagramTime time.Time
 	Merkle           *MerkleTree
-	buffer           [][]byte
-	BufferIndex      int
-	PendingRootHash  []byte
+	Buffer           []byte
 }
 
 var waitingResponses []WaitingResponse
@@ -135,23 +133,23 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 				waitingResponses = append(waitingResponses[:i], waitingResponses[i+1:]...)
 
 				// In addition to sessions opened by other peers, we also store sessions we opened
-				if buf[TYPE_BYTE] == 128 {
+				if buf[TYPE_BYTE] == HELLO_REPLY_TYPE {
 					i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 					if i != -1 {
 						sessionsWeOpened[i].LastDatagramTime = time.Now()
 					} else {
-						sessionWeOpened := SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil, PendingRootHash: nil}
+						sessionWeOpened := SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil, Buffer: nil}
 						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
 				}
 
 			} else { // We are waiting for a datagram from this address but not a datagram with the received datagram type
-				if buf[TYPE_BYTE] >= 128 { // If we receive a response type datagram
+				if buf[TYPE_BYTE] >= 128 && buf[TYPE_BYTE] != ERROR_TYPE { // If we receive a response type datagram
 					nonSolicitMessage = true
 				}
 			}
 		} else { // If we are not waiting for a message from this peer
-			if buf[TYPE_BYTE] >= 128 { // If we receive a response type datagram
+			if buf[TYPE_BYTE] >= 128 && buf[TYPE_BYTE] != ERROR_TYPE { // If we receive a response type datagram
 				nonSolicitMessage = true
 			}
 		}
@@ -164,8 +162,8 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 		i = sliceContainsSession(openSessions, udpAddress.String())
 		if i != -1 {
-			if buf[TYPE_BYTE] == 0 {
-				openSessions[i].LastDatagramTime = time.Now()
+			if buf[TYPE_BYTE] == HELLO_TYPE {
+				openSessions[i].LastHandshakeTime = time.Now()
 			}
 		} else { // If there is no open session
 			if int(buf[TYPE_BYTE]) != HELLO_TYPE && int(buf[TYPE_BYTE]) <= 127 {
@@ -177,7 +175,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLY_TYPE, udpAddress, nil, privateKey)
-			openSession := &OpenSession{FullAddress: udpAddress, LastDatagramTime: time.Now()}
+			openSession := &OpenSession{FullAddress: udpAddress, LastHandshakeTime: time.Now()}
 			openSessions = append(openSessions, *openSession)
 
 		case byte(ROOT_REQUEST_TYPE):
@@ -192,10 +190,10 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 				if sessionsWeOpened[i].Merkle == nil {
 					if DEBUG_MODE {
 						fmt.Println()
-						fmt.Printf("So far we have not created a Merkle tree for this session. We create a Merkle tree now. \n")
+						fmt.Printf("So far we have not created a Merkle tree for this session, so we create a Merkle tree now. \n")
 					}
 					sessionsWeOpened[i].Merkle = CreateEmptyTree(MERKLE_TREE_MAX_ARITY)
-					sessionsWeOpened[i].PendingRootHash = rootHash
+					sessionsWeOpened[i].Buffer = rootHash
 				} else {
 					if fmt.Sprintf("%x", rootHash) == fmt.Sprintf("%x", sessionsWeOpened[i].Merkle.Root.Hash) {
 						if DEBUG_MODE {
@@ -208,7 +206,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 							fmt.Print("The root we got is not the same as the root that was stored so far in the Merkle tree for this session. We will save the new hash in a buffer until we get the node that this hash represents.\n")
 							fmt.Print("If the hash matches the node, we will replace the root of the Merkel tree. \n")
 						}
-						sessionsWeOpened[i].PendingRootHash = rootHash
+						sessionsWeOpened[i].Buffer = rootHash
 					}
 				}
 
@@ -219,7 +217,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
-				sessionsWeOpened[i].PendingRootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
+				sessionsWeOpened[i].Buffer = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
 			}
 
 		case byte(NO_DATUM_TYPE):
@@ -227,7 +225,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
 			if i != -1 {
-				sessionsWeOpened[i].PendingRootHash = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
+				sessionsWeOpened[i].Buffer = buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
 			}
 
 		}
@@ -305,8 +303,10 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 			if sliceContainsAddress(waitingResponses, address.String()) == -1 {
 				responseReceived = true
 			} else {
-				if i == 3 && DEBUG_MODE {
-					log.Printf("AFTER %d ATTEMPTS, THERE IS NO ANSWER FROM %s TO DATAGRAM OF TYPE %d \n", i+1, address.String(), datagramType)
+				if i == 3 {
+					if DEBUG_MODE {
+						log.Printf("AFTER %d ATTEMPTS, WE DID NOT GET THE ANSWER WE EXPECTED FROM %s TO DATAGRAM OF TYPE %d \n", i+1, address.String(), datagramType)
+					}
 					writingSuccessful = false
 				}
 			}
@@ -333,7 +333,7 @@ func sliceContainsSession(slice []OpenSession, address string) int {
 	for i, element := range slice {
 		if element.FullAddress.String() == address {
 			// After an hour the session is no longer valid and in that case we remove it
-			if time.Since(element.LastDatagramTime).Minutes() > 55 {
+			if time.Since(element.LastHandshakeTime).Minutes() > 55 {
 				openSessions = append(openSessions[:i], openSessions[i+1:]...)
 				return -1
 			} else {
@@ -347,19 +347,7 @@ func sliceContainsSession(slice []OpenSession, address string) int {
 func sliceContainsSessionWeOpened(slice []SessionWeOpened, address string, conn net.PacketConn, privateKey *ecdsa.PrivateKey) int {
 	for i, element := range slice {
 		if element.FullAddress.String() == address {
-			// After an hour the session is no longer valid
-			if time.Since(element.LastDatagramTime).Minutes() > 55 {
-				// We resend a Hello message, if we receive HelloReplay as a response
-				// (the write function will return true), we succeed in renewing the session
-				if UdpWrite(conn, string([]byte{0, 0, 0, 0}), HELLO_TYPE, element.FullAddress, nil, privateKey) {
-					return i
-				} else {
-					sessionsWeOpened = append(sessionsWeOpened[:i], sessionsWeOpened[i+1:]...) // We remove the session
-					return -1
-				}
-			} else {
-				return i
-			}
+			return i
 		}
 	}
 	return -1
