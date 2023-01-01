@@ -96,16 +96,7 @@ func (merkleTree *MerkleTree) AddNode(hash []byte, nodeData []byte) bool {
 				}
 
 				if !hashFoundInParentNode {
-					if i < len(merkleTree.Root.Children)-1 {
-						merkleTree.Root.Children = append(merkleTree.Root.Children[:i], merkleTree.Root.Children[i+1:]...)
-					} else {
-						fmt.Printf("Test %d \n", len(merkleTree.Root.Children))
-						if len(merkleTree.Root.Children)-1 == 0 {
-							merkleTree.Root.Children = []*MerkleNode{}
-						} else {
-							merkleTree.Root.Children = merkleTree.Root.Children[:i]
-						}
-					}
+					merkleTree.Root.Children = append(merkleTree.Root.Children[:i], merkleTree.Root.Children[i+1:]...)
 				}
 			}
 		}
@@ -278,6 +269,14 @@ func (merkleTree *MerkleTree) PrintNodesData(nodeHeight int, merkleNode *MerkleN
 		fmt.Printf("\t")
 	}
 	fmt.Printf("Node data : %s \n", nodeDataToString(merkleNode.Data, nodeHeight))
+
+	return false
+}
+
+func (merkleTree *MerkleTree) PrintLeaf(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	if merkleNode.Data[NODE_TYPE_BYTE] == NODE_TYPE_MESSAGE {
+		fmt.Printf("%s \n", nodeDataToString(merkleNode.Data, 0))
+	}
 
 	return false
 }

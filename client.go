@@ -7,13 +7,11 @@ import (
 	cryptoRand "crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -45,13 +43,12 @@ const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION + "_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
 const UDP_LISTENING_ADDRESS = ":8081"
 
+var datagramId = "idid"
+
 var peers []Peer
 var ThisPeerMerkleTree = CreateTree(CreateMessagesForMerkleTree(33), MERKLE_TREE_MAX_ARITY)
 
 func main() {
-	//rand.Seed(int64(time.Now().Nanosecond()))
-	var datagram_id = "idid"
-
 	httpClient := CreateHttpClient()
 
 	/* KEY CRYPTOGRAPHY
@@ -152,9 +149,6 @@ func main() {
 
 	/* HELLO TO EACH OF THE UDP ADDRESSES OF THE SERVER
 	 */
-
-	//myByteId := CreateRandId()
-
 	// func net.ListenPacket(network string, address string) (net.PacketConn, error)
 	conn, errorMessage := net.ListenPacket("udp", UDP_LISTENING_ADDRESS)
 	if errorMessage != nil {
@@ -189,7 +183,7 @@ func main() {
 			log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 		}
 
-		UdpWrite(conn, datagram_id, HELLO_TYPE, serverAddr, nil, privateKey)
+		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, privateKey)
 	}
 
 	fmt.Println()
@@ -223,7 +217,7 @@ func main() {
 			fmt.Println("SEND HELLO TO PEER ADDRESS : ")
 			fmt.Println("Enter peer address : ")
 			fmt.Scanln(&peerAddress)
-			if !helloToPeerAddress(conn, peerAddress, datagram_id, privateKey) {
+			if !helloToPeerAddress(conn, peerAddress, datagramId, privateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the peers known to the client \n", peerAddress)
 			}
 
@@ -233,7 +227,7 @@ func main() {
 			fmt.Println("ROOT REQUEST TO A OPENED SESSION : ")
 			fmt.Println("Enter peer address : ")
 			fmt.Scanln(&peerAddress)
-			if !rootRequestToOpenedSession(conn, peerAddress, datagram_id, privateKey) {
+			if !rootRequestToOpenedSession(conn, peerAddress, datagramId, privateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions \n", peerAddress)
 			}
 		case 'e':
@@ -242,13 +236,31 @@ func main() {
 			fmt.Println("OBTAIN THE MERKLE TREE FROM ANOTHER PEER WHO GAVE US THE HASH OF ROOT : ")
 			fmt.Println("Enter peer address : ")
 			fmt.Scanln(&peerAddress)
-			if !getMerkleTreeAnotherPeer(conn, peerAddress, datagram_id, privateKey) {
+			if !getMerkleTreeAnotherPeer(conn, peerAddress, datagramId, privateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have the hash of the root  \n", peerAddress)
-				fmt.Printf("Another option is that you have previously received the Merkle tree of this peer. Therefore, before trying again, you must first request the root again  \n")
 			}
 		case 'f':
 			ThisPeerMerkleTree.DepthFirstSearch(0, ThisPeerMerkleTree.PrintNodesData, nil)
 		case 'g':
+			var peerAddress string
+			fmt.Println()
+			fmt.Println("DISPLAYING ANOTHER PEER'S MERKLE TREE : ")
+			fmt.Println("Enter peer address : ")
+			fmt.Scanln(&peerAddress)
+			if !printMerkleTreeAnotherPeer(conn, peerAddress, datagramId) {
+				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have a Merkle tree for this session.  \n", peerAddress)
+			}
+		case 'h':
+			var peerAddress string
+			fmt.Println()
+			fmt.Println("DISPLAYING ANOTHER PEER'S MESSEGES : ")
+			fmt.Println("Enter peer address : ")
+			fmt.Scanln(&peerAddress)
+			if !printLeafFromMerkleTreeAnotherPeer(conn, peerAddress, datagramId) {
+				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have a Merkle tree for this session.  \n", peerAddress)
+			}
+
+		case 'i':
 			os.Exit(0)
 		default:
 			fmt.Println()
@@ -267,8 +279,9 @@ func printMenu() {
 	str += fmt.Sprintln("d - Root request to a opened session")
 	str += fmt.Sprintln("e - Obtain the merkle tree from another peer who gave us the hash of root")
 	str += fmt.Sprintln("f - Print our peer's Merkle tree")
-	str += fmt.Sprintln("g - Quit")
-
+	str += fmt.Sprintln("g - Displaying another peer's Merkle tree")
+	str += fmt.Sprintln("h - Displaying another peer's messages")
+	str += fmt.Sprintln("i - Quit")
 	fmt.Printf(str)
 }
 
@@ -365,8 +378,8 @@ func rootRequestToOpenedSession(conn net.PacketConn, peerAddress string, datagra
 func getMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	for i := 0; i < len(sessionsWeOpened); i++ {
 		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
-			if sessionsWeOpened[i].PendingRootHash != nil && len(sessionsWeOpened[i].PendingRootHash) == HASH_LENGTH {
-				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].PendingRootHash, privateKey)
+			if sessionsWeOpened[i].Buffer != nil && len(sessionsWeOpened[i].Buffer) == HASH_LENGTH {
+				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[i].FullAddress, sessionsWeOpened[i].Buffer, privateKey)
 				if writeResult {
 					getDatumResult := getDatum(conn, i, datagramId, privateKey)
 					if getDatumResult || true {
@@ -379,34 +392,38 @@ func getMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramI
 	return false
 }
 
+/* A recursive function that obtains the parts that are in the Merkle tree of another peer and are not yet in our possession
+ */
 func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateKey *ecdsa.PrivateKey) bool {
-	datagramBody := sessionsWeOpened[sessionIndex].PendingRootHash
-	hash := datagramBody[0:HASH_LENGTH]
+	datagramBody := sessionsWeOpened[sessionIndex].Buffer // We take from the buffer the last node we received
 
-	if len(datagramBody) == HASH_LENGTH {
+	if len(datagramBody) <= HASH_LENGTH { // Invalid node length
 		return false
 	}
 
+	hash := datagramBody[0:HASH_LENGTH]
+	// If we failed to add the node to the tree (because the hash does not match the content of the node for example)
 	if !sessionsWeOpened[sessionIndex].Merkle.AddNode(hash, datagramBody[HASH_LENGTH:]) {
 		return false
 	}
 
-	sessionsWeOpened[sessionIndex].Merkle.DepthFirstSearch(0, sessionsWeOpened[sessionIndex].Merkle.PrintNodesData, nil)
+	// Presentation of the Merkle tree step by step during its construction
+	//sessionsWeOpened[sessionIndex].Merkle.DepthFirstSearch(0, sessionsWeOpened[sessionIndex].Merkle.PrintNodesData, nil)
 
 	if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == NODE_TYPE_MESSAGE {
 		return true
 	}
 
 	if datagramBody[HASH_LENGTH+NODE_TYPE_BYTE] == NODE_TYPE_INTERNAL {
-
-		for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH {
-
+		// We go through each of the hashes found in the last node we received
+		for i := 1 + HASH_LENGTH; i < len(datagramBody); i += HASH_LENGTH { // 1 for the type byte
 			hashI := datagramBody[i : i+HASH_LENGTH]
 
+			// We are looking for the hash in the Merkle tree. If it does not exist the function DepthFirstSearch() returns nil
 			if sessionsWeOpened[sessionIndex].Merkle.DepthFirstSearch(0, sessionsWeOpened[sessionIndex].Merkle.GetNodeByHash, hashI) == nil {
 
 				writeResult := UdpWrite(conn, datagramId, GET_DATUM_TYPE, sessionsWeOpened[sessionIndex].FullAddress, hashI, privateKey)
-				if writeResult {
+				if writeResult { // The UdpWrite function returns true if we received an answer
 
 					getDatum(conn, sessionIndex, datagramId, privateKey)
 				} else {
@@ -419,19 +436,32 @@ func getDatum(conn net.PacketConn, sessionIndex int, datagramId string, privateK
 	return true
 }
 
-func CreateRandId() []byte {
-	id := new(bytes.Buffer)
-	err := binary.Write(id, binary.LittleEndian, rand.Int31())
-	if err != nil {
-		fmt.Println("binary.Write failed in CreateRandId() :", err)
+/*
+ *
+ */
+func printMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string) bool {
+	for i := 0; i < len(sessionsWeOpened); i++ {
+		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
+			if sessionsWeOpened[i].Merkle != nil {
+				sessionsWeOpened[i].Merkle.DepthFirstSearch(0, sessionsWeOpened[i].Merkle.PrintNodesData, nil)
+				return true
+			}
+		}
 	}
-	return id.Bytes()
+	return false
 }
 
 /*
-func CreateRandId2() []byte {
-	var id [4]byte
-	copy(id, rand.Int31())
-	return id
+ *
+ */
+func printLeafFromMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string) bool {
+	for i := 0; i < len(sessionsWeOpened); i++ {
+		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
+			if sessionsWeOpened[i].Merkle != nil {
+				sessionsWeOpened[i].Merkle.DepthFirstSearch(0, sessionsWeOpened[i].Merkle.PrintLeaf, nil)
+				return true
+			}
+		}
+	}
+	return false
 }
-*/
