@@ -273,6 +273,14 @@ func (merkleTree *MerkleTree) PrintNodesData(nodeHeight int, merkleNode *MerkleN
 	return false
 }
 
+func (merkleTree *MerkleTree) PrintLeaf(nodeHeight int, merkleNode *MerkleNode, hashSearch []byte) bool {
+	if merkleNode.Data[NODE_TYPE_BYTE] == NODE_TYPE_MESSAGE {
+		fmt.Printf("%s \n", nodeDataToString(merkleNode.Data, 0))
+	}
+
+	return false
+}
+
 /******************************************************************************************/
 func CreateMessage(body string, inReplyTo []byte) []byte {
 	timeSinceJanuary := fmt.Sprintf("%d", int(time.Since(JANUARY_1_2022).Seconds()))

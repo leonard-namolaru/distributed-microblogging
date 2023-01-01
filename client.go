@@ -240,8 +240,17 @@ func main() {
 			if !printMerkleTreeAnotherPeer(conn, peerAddress, datagramId) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have a Merkle tree for this session.  \n", peerAddress)
 			}
-
 		case 'h':
+			var peerAddress string
+			fmt.Println()
+			fmt.Println("DISPLAYING ANOTHER PEER'S MESSEGES : ")
+			fmt.Println("Enter peer address : ")
+			fmt.Scanln(&peerAddress)
+			if !printLeafFromMerkleTreeAnotherPeer(conn, peerAddress, datagramId) {
+				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have a Merkle tree for this session.  \n", peerAddress)
+			}
+
+		case 'i':
 			os.Exit(0)
 		default:
 			fmt.Println()
@@ -261,7 +270,8 @@ func printMenu() {
 	str += fmt.Sprintln("e - Obtain the merkle tree from another peer who gave us the hash of root")
 	str += fmt.Sprintln("f - Print our peer's Merkle tree")
 	str += fmt.Sprintln("g - Displaying another peer's Merkle tree")
-	str += fmt.Sprintln("h - Quit")
+	str += fmt.Sprintln("h - Displaying another peer's messages")
+	str += fmt.Sprintln("i - Quit")
 	fmt.Printf(str)
 }
 
@@ -424,6 +434,21 @@ func printMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagra
 		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
 			if sessionsWeOpened[i].Merkle != nil {
 				sessionsWeOpened[i].Merkle.DepthFirstSearch(0, sessionsWeOpened[i].Merkle.PrintNodesData, nil)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+/*
+ *
+ */
+func printLeafFromMerkleTreeAnotherPeer(conn net.PacketConn, peerAddress string, datagramId string) bool {
+	for i := 0; i < len(sessionsWeOpened); i++ {
+		if peerAddress == sessionsWeOpened[i].FullAddress.String() || peerAddress == fmt.Sprintf("%s:%v", sessionsWeOpened[i].FullAddress.IP.String(), sessionsWeOpened[i].FullAddress.Port) {
+			if sessionsWeOpened[i].Merkle != nil {
+				sessionsWeOpened[i].Merkle.DepthFirstSearch(0, sessionsWeOpened[i].Merkle.PrintLeaf, nil)
 				return true
 			}
 		}

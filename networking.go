@@ -14,12 +14,12 @@ import (
 	"time"
 )
 
-const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
+const BUFFER_SIZE = 1500
 
 type WaitingResponse struct {
-	FullAddress   *net.UDPAddr
-	DatagramTypes []int
-	Id            []byte
+	FullAddress   *net.UDPAddr // The UDP address from which we are waiting for a reply
+	DatagramTypes []int        // A list of the type numbers of the datagrams we are waiting to receive from this address. For example: HELLO_REPLY_TYPE, DATUM_TYPE, NO_DATUM_TYPE
+	Id            []byte       // The id that should be in the datagram of the answer we will receive (the same as the id in the datagram of our request)
 }
 
 type OpenSession struct {
@@ -106,7 +106,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 
 	for {
-		buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES+500)
+		buf := make([]byte, BUFFER_SIZE)
 
 		_, address, err := conn.ReadFrom(buf)
 		if err != nil {
