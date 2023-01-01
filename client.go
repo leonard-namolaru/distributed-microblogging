@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"math/big"
 )
 
 type ServerRegistration struct {
@@ -28,7 +29,7 @@ type ServerRegistration struct {
 
 type Peer struct {
 	Username string    `json:"name"`
-	Adresses []Address `json:"addresses"`
+	Addresses []Address `json:"addresses"`
 	Key      string    `json:"key"`
 }
 
@@ -164,7 +165,16 @@ func main() {
 	log.Printf("LISTENING TO %s \n", UDP_LISTENING_ADDRESS)
 
 	// The reading of the received datagrams is done in a separate thread
-	go UdpRead(conn, privateKey)
+	var x, y big.Int
+	x.SetBytes(publicKeyFromServerBytes[:32])
+	y.SetBytes(publicKeyFromServerBytes[32:])
+	publicKeyFromServer := &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X: &x,
+		Y: &y,
+	}
+
+	go UdpRead(conn, privateKey, serverUdpAddresses, publicKeyFromServer)
 
 	for _, address := range serverUdpAddresses {
 		var full_address string
@@ -296,7 +306,7 @@ func getPeerAddresses(client *http.Client, peersKnownToServer []byte, peerName s
 				if DEBUG_MODE {
 					fmt.Printf("Peer key : %s\n", peer.Key)
 
-					for i, address := range peer.Adresses {
+					for i, address := range peer.Addresses {
 						fmt.Printf("Peer ip %d : %s\n", i+1, address.Ip)
 						fmt.Printf("Peer port %d : %d\n", i+1, address.Port)
 					}
@@ -315,7 +325,7 @@ func getPeerAddresses(client *http.Client, peersKnownToServer []byte, peerName s
  */
 func helloToPeerAddress(conn net.PacketConn, peerAddress string, datagramId string, privateKey *ecdsa.PrivateKey) bool {
 	for _, peer := range peers {
-		for _, address := range peer.Adresses {
+		for _, address := range peer.Addresses {
 			var full_address string
 			if peerAddress == fmt.Sprintf("%s:%v", address.Ip, address.Port) {
 				if net.ParseIP(address.Ip).To4() == nil {

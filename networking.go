@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"math/big"
+	"crypto/sha256"
 )
 
 const DATAGRAM_MAX_LENGTH_IN_BYTES = 1024
@@ -105,7 +107,7 @@ func HttpRequest(requestType string, client *http.Client, requestUrl string, dat
 	return responseBody, response.StatusCode
 }
 
-func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
+func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromServer []Address, publicKeyFromServer *ecdsa.PublicKey) {
 
 	for {
 		buf := make([]byte, DATAGRAM_MAX_LENGTH_IN_BYTES+500)
@@ -123,6 +125,57 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey) {
 		udpAddress, err := net.ResolveUDPAddr("udp", address.String())
 		if err != nil {
 			log.Fatalf("The method net.ResolveUDPAddr() failed in udpRead() during the resolve of the address %s : %v \n", address.String(), err)
+		}
+
+		addressFind := false
+		for _,addr := range addressesFromServer {
+			if int(addr.Port) == udpAddress.Port && net.ParseIP(addr.Ip).Equal(udpAddress.IP) && !addressFind {
+				addressFind = true
+				if buf[TYPE_BYTE] == 0 || buf[TYPE_BYTE] == 128 || buf[TYPE_BYTE] == byte(ROOT_REQUEST_TYPE) || buf[TYPE_BYTE] == byte(ROOT_TYPE) {
+					lenght := (buf[5] << 8) + buf[6]
+					signature := buf[BODY_FIRST_BYTE+lenght:BODY_FIRST_BYTE+lenght+SIGNATURE_LENGTH]
+					var r, s big.Int
+					r.SetBytes(signature[:32])
+					s.SetBytes(signature[32:])
+					hashed := sha256.Sum256(buf[:BODY_FIRST_BYTE+lenght])
+					ok := ecdsa.Verify(publicKeyFromServer, hashed[:], &r, &s)
+					if !ok {
+						panic(ok)
+					}
+					if DEBUG_MODE {
+						fmt.Printf("Signature verified : %v\n",ok)
+					}
+				}
+			}
+		}
+
+		if !addressFind {
+			for _,peer := range peers {
+				for _, addr := range peer.Addresses {
+					if int(addr.Port) == udpAddress.Port && net.ParseIP(addr.Ip).Equal(udpAddress.IP) && !addressFind {
+						addressFind = true
+						if buf[TYPE_BYTE] == 0 || buf[TYPE_BYTE] == 128 || buf[TYPE_BYTE] == byte(ROOT_REQUEST_TYPE) || buf[TYPE_BYTE] == byte(ROOT_TYPE) {
+							lenght := (buf[5] << 8) + buf[6]
+							signature := buf[BODY_FIRST_BYTE+lenght:BODY_FIRST_BYTE+lenght+SIGNATURE_LENGTH]
+							var r, s big.Int
+							r.SetBytes(signature[:32])
+							s.SetBytes(signature[32:])
+							hashed := sha256.Sum256(buf[:BODY_FIRST_BYTE+lenght])
+							ok := ecdsa.Verify(publicKeyFromServer, hashed[:], &r, &s)
+							if !ok {
+								panic(ok)
+							}
+							if DEBUG_MODE {
+								fmt.Printf("Signature verified : %v\n",ok)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if !addressFind {
+			fmt.Println("Response from unknown")
 		}
 
 		mutex.Lock()
