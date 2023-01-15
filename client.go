@@ -1,23 +1,16 @@
 package main
 
 import (
-	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	cryptoRand "crypto/rand"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"math/big"
+	"crypto/ecdsa"
 )
 
 type ServerRegistration struct {
@@ -53,56 +46,9 @@ func main() {
 
 	/* KEY CRYPTOGRAPHY
 	 */
-
 	fileInfo, err := os.Stat(NAME_FILE_PRIVATE_KEY)
-	if err != nil || fileInfo.Size() == 0 {
-
-		privateKey, err := ecdsa.GenerateKey(elliptic.P256(), cryptoRand.Reader)
-		privateKeyDr, err := x509.MarshalECPrivateKey(privateKey)
-		if err != nil {
-			panic(err)
-		}
-		privPEM := pem.EncodeToMemory(
-			&pem.Block{
-				Type:  "EC PRIVATE KEY",
-				Bytes: privateKeyDr,
-			},
-		)
-
-		err = ioutil.WriteFile(NAME_FILE_PRIVATE_KEY, privPEM, 0644)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	data, err := ioutil.ReadFile(NAME_FILE_PRIVATE_KEY)
-	if err != nil {
-		panic(err)
-	}
-
-	lines := strings.Split(string(data), "\n")
-	lines = lines[1 : len(lines)-2]
-
-	privateKeyString := strings.Join(lines, "")
-	if DEBUG_MODE {
-		fmt.Printf("privateKeyString : %v\n", privateKeyString)
-	}
-
-	// Create the private key
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), bytes.NewReader([]byte(privateKeyString)))
-	if err != nil {
-		panic(err)
-	}
-
-	publicKey, _ := privateKey.Public().(*ecdsa.PublicKey)
-	publicKey64Bytes := make([]byte, 64)
-	publicKey.X.FillBytes(publicKey64Bytes[:32])
-	publicKey.Y.FillBytes(publicKey64Bytes[32:])
-	publicKeyEncoded := base64.RawStdEncoding.EncodeToString(publicKey64Bytes)
-
-	if DEBUG_MODE {
-		fmt.Printf("Our public key : %s\n", publicKeyEncoded)
-	}
+	myPrivateKey := CreateOrFindPrivateKey(fileInfo, err)
+	myPublicKeyEncoded := CreatePublicKeyEncoded(myPrivateKey)
 
 	/* GET THE UDP ADDRESS OF THE SERVER
 	 *  HTTP GET to /udp-address followed by a JSON decode.
@@ -126,7 +72,7 @@ func main() {
 	/* SERVER REGISTRATION
 	 *  A POST REQUEST TO /register
 	 */
-	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: publicKeyEncoded}
+	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: myPublicKeyEncoded}
 	jsonEncoding, err := json.Marshal(serverRegistration)
 	if err != nil {
 		log.Fatalf("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
@@ -141,10 +87,11 @@ func main() {
 	 */
 	requestUrl = url.URL{Scheme: "https", Host: HOST, Path: "/server-key"}
 	publicKeyFromServerBytes, _ := HttpRequest("GET", httpClient, requestUrl.String(), nil, "%x")
-	publicKeyFromServerString := base64.RawStdEncoding.EncodeToString(publicKeyFromServerBytes)
+	publicKeyFromServer := ConvertBytesToEcdsaPublicKey(publicKeyFromServerBytes)
+	publicKeyFromServerEncoded := base64.RawStdEncoding.EncodeToString(publicKeyFromServerBytes)
 
 	if DEBUG_MODE {
-		fmt.Printf("Public Key from server as string : %s\n", publicKeyFromServerString)
+		fmt.Printf("Public Key from server as string : %s\n", publicKeyFromServerEncoded)
 	}
 
 	/* HELLO TO EACH OF THE UDP ADDRESSES OF THE SERVER
@@ -159,16 +106,8 @@ func main() {
 	log.Printf("LISTENING TO %s \n", UDP_LISTENING_ADDRESS)
 
 	// The reading of the received datagrams is done in a separate thread
-	var x, y big.Int
-	x.SetBytes(publicKeyFromServerBytes[:32])
-	y.SetBytes(publicKeyFromServerBytes[32:])
-	publicKeyFromServer := &ecdsa.PublicKey{
-		Curve: elliptic.P256(),
-		X: &x,
-		Y: &y,
-	}
 
-	go UdpRead(conn, privateKey, serverUdpAddresses, publicKeyFromServer)
+	go UdpRead(conn, myPrivateKey, serverUdpAddresses, publicKeyFromServer)
 
 	for _, address := range serverUdpAddresses {
 		var full_address string
@@ -183,7 +122,7 @@ func main() {
 			log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 		}
 
-		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, privateKey)
+		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, myPrivateKey)
 	}
 
 	fmt.Println()
@@ -217,7 +156,7 @@ func main() {
 			fmt.Println("SEND HELLO TO PEER ADDRESS : ")
 			fmt.Println("Enter peer address : ")
 			fmt.Scanln(&peerAddress)
-			if !helloToPeerAddress(conn, peerAddress, datagramId, privateKey) {
+			if !helloToPeerAddress(conn, peerAddress, datagramId, myPrivateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the peers known to the client \n", peerAddress)
 			}
 
@@ -227,7 +166,7 @@ func main() {
 			fmt.Println("ROOT REQUEST TO A OPENED SESSION : ")
 			fmt.Println("Enter peer address : ")
 			fmt.Scanln(&peerAddress)
-			if !rootRequestToOpenedSession(conn, peerAddress, datagramId, privateKey) {
+			if !rootRequestToOpenedSession(conn, peerAddress, datagramId, myPrivateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions \n", peerAddress)
 			}
 		case 'e':
@@ -236,7 +175,7 @@ func main() {
 			fmt.Println("OBTAIN THE MERKLE TREE FROM ANOTHER PEER WHO GAVE US THE HASH OF ROOT : ")
 			fmt.Println("Enter peer address : ")
 			fmt.Scanln(&peerAddress)
-			if !getMerkleTreeAnotherPeer(conn, peerAddress, datagramId, privateKey) {
+			if !getMerkleTreeAnotherPeer(conn, peerAddress, datagramId, myPrivateKey) {
 				fmt.Printf("The address %s you specified was not found in the list of addresses of the opened sessions or we don't have the hash of the root  \n", peerAddress)
 			}
 		case 'f':
