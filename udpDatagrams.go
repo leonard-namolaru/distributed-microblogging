@@ -2,8 +2,6 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/sha256"
 	"fmt"
 	"log"
 )
@@ -77,18 +75,9 @@ func HelloOrHelloReplyDatagram(isHelloDatagram bool, id string, userName string,
 	datagram[USER_NAME_LENGTH_BYTE] = byte(usernameLength)
 	copy(datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+usernameLength], userName)
 
-	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
-	r, s, errorMessage := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
-	if errorMessage != nil {
-		log.Fatalf("The method ecdsa.Sign() failed In the phase of building a datagram of type %d : %v \n", datagramType, errorMessage)
-	}
-	signature := make([]byte, SIGNATURE_LENGTH)
-	r.FillBytes(signature[:32])
-	s.FillBytes(signature[32:])
+	datagramWithSignature := CreateSignature(datagram, datagramLength, privateKey)
 
-	copy(datagram[USER_NAME_FIRST_BYTE+usernameLength:], signature)
-
-	return datagram
+	return datagramWithSignature
 }
 
 /********************************************** ROOT_REQUEST, ROOT **********************************************/
@@ -96,18 +85,9 @@ func RootRequestDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + ROOT_REQUEST_BODY_LENGTH + SIGNATURE_LENGTH
 	datagram := datagramGeneralStructure([]byte(id), ROOT_REQUEST_TYPE, ROOT_REQUEST_BODY_LENGTH, datagramLength)
 
-	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
-	r, s, errorMessage := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
-	if errorMessage != nil {
-		log.Fatalf("The method ecdsa.Sign() failed In the phase of building a datagram of type %d : %v \n", ROOT_REQUEST_TYPE, errorMessage)
-	}
-	signature := make([]byte, SIGNATURE_LENGTH)
-	r.FillBytes(signature[:32])
-	s.FillBytes(signature[32:])
+	datagramWithSignature := CreateSignature(datagram, datagramLength, privateKey)
 
-	copy(datagram[datagramLength-SIGNATURE_LENGTH:], signature)
-
-	return datagram
+	return datagramWithSignature
 }
 
 func RootDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
@@ -116,18 +96,9 @@ func RootDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
 
 	copy(datagram[BODY_FIRST_BYTE:], ThisPeerMerkleTree.Root.Hash)
 
-	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
-	r, s, errorMessage := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
-	if errorMessage != nil {
-		log.Fatalf("The method ecdsa.Sign() failed In the phase of building a datagram of type %d : %v \n", ROOT_TYPE, errorMessage)
-	}
-	signature := make([]byte, SIGNATURE_LENGTH)
-	r.FillBytes(signature[:32])
-	s.FillBytes(signature[32:])
+	datagramWithSignature := CreateSignature(datagram, datagramLength, privateKey)
 
-	copy(datagram[datagramLength-SIGNATURE_LENGTH:], signature)
-
-	return datagram
+	return datagramWithSignature
 }
 
 /********************************************** DATUM, GET_DATUM, NO_DATUM **********************************************/

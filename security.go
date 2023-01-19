@@ -17,6 +17,8 @@ import (
 	"io/ioutil"
 	"encoding/base64"
 	"fmt"
+	"crypto/sha256"
+	"log"
 )
 
 func Encrypt(key []byte, plainText []byte) []byte {
@@ -147,4 +149,33 @@ func ConvertBytesToEcdsaPublicKey(keyBytes []byte) *ecdsa.PublicKey {
 		Y: &y,
 	}
 	return publicKey
+}
+
+func VerifySignature(buf []byte, publicKey *ecdsa.PublicKey) bool {
+	length := int((buf[5] << 8) + buf[6])
+	signature := buf[BODY_FIRST_BYTE+length:BODY_FIRST_BYTE+length+SIGNATURE_LENGTH]
+	var r, s big.Int
+	r.SetBytes(signature[:32])
+	s.SetBytes(signature[32:])
+	hashed := sha256.Sum256(buf[:BODY_FIRST_BYTE+length])
+	ok := ecdsa.Verify(publicKey, hashed[:], &r, &s)
+	if DEBUG_MODE {
+		fmt.Printf("Signature verified : %v\n",ok)
+	}
+	return ok
+}
+
+func CreateSignature(datagram []byte, datagramLength int, privateKey *ecdsa.PrivateKey) []byte {
+	hashed := sha256.Sum256(datagram[:datagramLength-SIGNATURE_LENGTH])
+	r, s, errorMessage := ecdsa.Sign(rand.Reader, privateKey, hashed[:])
+	if errorMessage != nil {
+		log.Fatalf("The method ecdsa.Sign() failed In the phase of building a datagram of type %d : %v \n", ROOT_REQUEST_TYPE, errorMessage)
+	}
+	signature := make([]byte, SIGNATURE_LENGTH)
+	r.FillBytes(signature[:32])
+	s.FillBytes(signature[32:])
+
+	copy(datagram[datagramLength-SIGNATURE_LENGTH:], signature)
+
+	return datagram
 }
