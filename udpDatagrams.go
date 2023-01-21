@@ -10,12 +10,13 @@ import (
 const HELLO_TYPE = 0
 const ROOT_REQUEST_TYPE = 1
 const GET_DATUM_TYPE = 2
-const SEND_KEY_TYPE = 8
+const SEND_KEY_HELLO_TYPE = 8
 
 const HELLO_REPLY_TYPE = 128
 const ROOT_TYPE = 129
 const DATUM_TYPE = 130
 const NO_DATUM_TYPE = 131
+const SEND_KEY_HELLO_REPLY_TYPE = 132
 const ERROR_TYPE = 254
 
 /* General structure of a datagram */
@@ -103,9 +104,14 @@ func RootDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
 	return datagramWithSignature
 }
 
-func SendKeyDatagram(id string, publicKey []byte, privateKey *ecdsa.PrivateKey) []byte {
+func SendKeyDatagram(id string, publicKey []byte, privateKey *ecdsa.PrivateKey, isReply bool) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + len(publicKey) + SIGNATURE_LENGTH
-	datagram := datagramGeneralStructure([]byte(id), SEND_KEY_TYPE, len(publicKey), datagramLength)
+	datgramType := SEND_KEY_HELLO_TYPE
+	if isReply {
+		datgramType = SEND_KEY_HELLO_REPLY_TYPE
+	}
+
+	datagram := datagramGeneralStructure([]byte(id), datgramType, len(publicKey), datagramLength)
 
 	copy(datagram[BODY_FIRST_BYTE:], publicKey)
 

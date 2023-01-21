@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/ecdsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"crypto/ecdsa"
 )
 
 type ServerRegistration struct {
@@ -19,9 +19,9 @@ type ServerRegistration struct {
 }
 
 type Peer struct {
-	Username string    `json:"name"`
+	Username  string    `json:"name"`
 	Addresses []Address `json:"addresses"`
-	Key      string    `json:"key"`
+	Key       string    `json:"key"`
 }
 
 type Address struct {
@@ -31,10 +31,10 @@ type Address struct {
 
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
-const NAME_FOR_SERVER_REGISTRATION = "HugoTEST9"
+const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
 const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION + "_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
-const UDP_LISTENING_ADDRESS = ":8089"
+const UDP_LISTENING_ADDRESS = ":8081"
 
 var datagramId = "idid"
 
@@ -126,7 +126,7 @@ func main() {
 		fmt.Println("ON VA ENVOYER HELLO--------------------------------------")
 		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, myPrivateKey)
 		fmt.Println("ON A ENVOYER HELLO----------------------------------------")
-		break;
+		break
 	}
 
 	fmt.Println()

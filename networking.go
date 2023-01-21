@@ -194,7 +194,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 						myPublicKeyBytes, _ := base64.RawStdEncoding.DecodeString(myPublicKeyEncoded)
 						sessionsWeOpened[i].myPublicKey = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
 
-						UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), SEND_KEY_TYPE, udpAddress, []byte(myPublicKeyEncoded), privateKey)
+						UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), SEND_KEY_HELLO_TYPE, udpAddress, []byte(myPublicKeyEncoded), privateKey)
 					}
 				}
 
@@ -220,6 +220,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 			if buf[TYPE_BYTE] == HELLO_TYPE {
 				openSessions[i].LastHandshakeTime = time.Now()
 			}
+
 		} else { // If there is no open session
 			if int(buf[TYPE_BYTE]) != HELLO_TYPE && int(buf[TYPE_BYTE]) <= 127 {
 				UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ERROR_TYPE, udpAddress, []byte("No handshake was performed (Hello, HelloReplay) or more than an hour has passed since the last interaction"), privateKey)
@@ -227,7 +228,35 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 			}
 		}
 
+		i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
+		if i != -1 {
+			if sessionsWeOpened[i].sharedKey != nil {
+				buf = Decrypt(sessionsWeOpened[i].sharedKey, buf)
+			}
+		}
+
 		switch buf[TYPE_BYTE] {
+		case byte(SEND_KEY_HELLO_TYPE):
+			privateKeyForSession := CreatePrivateKeyForEncryption()
+			myPublicKeyEncoded := GeneratePublicEncodedKeyForEncryption(privateKeyForSession)
+
+			sessionsWeOpened[i].privateKeyForSession = CreatePrivateKeyForEncryption()
+			myPublicKeyBytes, _ := base64.RawStdEncoding.DecodeString(myPublicKeyEncoded)
+			sessionsWeOpened[i].myPublicKey = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
+
+			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), SEND_KEY_HELLO_REPLY_TYPE, udpAddress, []byte(myPublicKeyEncoded), privateKey)
+
+		case byte(SEND_KEY_HELLO_REPLY_TYPE):
+			i = sliceContainsSessionWeOpened(sessionsWeOpened, udpAddress.String(), conn, privateKey)
+			if i != -1 {
+				bodyLength := int(buf[LENGTH_FIRST_BYTE])<<8 | int(buf[LENGTH_FIRST_BYTE+1])
+				keyInBody := buf[BODY_FIRST_BYTE : BODY_FIRST_BYTE+bodyLength]
+				keyInBodByte, _ := base64.RawStdEncoding.DecodeString(string(keyInBody))
+				publicKeyFromPeer := ConvertBytesToEcdsaPublicKey(keyInBodByte)
+
+				sessionsWeOpened[i].sharedKey = GenerateSharedKey(*publicKeyFromPeer, sessionsWeOpened[i].privateKeyForSession)
+			}
+
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLY_TYPE, udpAddress, nil, privateKey)
 			openSession := &OpenSession{FullAddress: udpAddress, LastHandshakeTime: time.Now()}
@@ -312,10 +341,20 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		datagram = DatumDatagram(datagramId, data)
 	case ERROR_TYPE:
 		datagram = ErrorDatagram(datagramId, data)
-	case SEND_KEY_TYPE:
-		datagram = SendKeyDatagram(datagramId, data, privateKey)
+	case SEND_KEY_HELLO_TYPE:
+		datagram = SendKeyDatagram(datagramId, data, privateKey, false)
+	case SEND_KEY_HELLO_REPLY_TYPE:
+		datagram = SendKeyDatagram(datagramId, data, privateKey, true)
+
 	default:
 		return false
+	}
+
+	i := sliceContainsSessionWeOpened(sessionsWeOpened, address.String(), conn, privateKey)
+	if i != -1 {
+		if sessionsWeOpened[i].sharedKey != nil {
+			datagram = Encrypt(sessionsWeOpened[i].sharedKey, datagram)
+		}
 	}
 
 	waitForResponse := len(responseOptions) != 0
