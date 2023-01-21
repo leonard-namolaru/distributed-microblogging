@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"encoding/base64"
 	"time"
 )
 
@@ -29,10 +29,13 @@ type OpenSession struct {
 }
 
 type SessionWeOpened struct {
-	FullAddress      *net.UDPAddr
-	LastDatagramTime time.Time
-	Merkle           *MerkleTree
-	Buffer           []byte
+	FullAddress          *net.UDPAddr
+	LastDatagramTime     time.Time
+	Merkle               *MerkleTree
+	Buffer               []byte
+	sharedKey            []byte
+	privateKeyForSession *ecdsa.PrivateKey
+	myPublicKey          *ecdsa.PublicKey
 }
 
 var waitingResponses []WaitingResponse
@@ -125,10 +128,10 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 		}
 
 		addressFind := false
-		for _,addr := range addressesFromServer {
+		for _, addr := range addressesFromServer {
 			if int(addr.Port) == udpAddress.Port && net.ParseIP(addr.Ip).Equal(udpAddress.IP) && !addressFind {
 				if buf[TYPE_BYTE] == 0 || buf[TYPE_BYTE] == 128 || buf[TYPE_BYTE] == byte(ROOT_REQUEST_TYPE) || buf[TYPE_BYTE] == byte(ROOT_TYPE) {
-					ok := VerifySignature(buf, publicKeyFromServer )
+					ok := VerifySignature(buf, publicKeyFromServer)
 					if !ok {
 						panic(ok)
 					}
@@ -139,7 +142,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 		}
 
 		if !addressFind {
-			for _,peer := range peers {
+			for _, peer := range peers {
 				for _, addr := range peer.Addresses {
 					if int(addr.Port) == udpAddress.Port && net.ParseIP(addr.Ip).Equal(udpAddress.IP) && !addressFind {
 						if buf[TYPE_BYTE] == 0 || buf[TYPE_BYTE] == 128 || buf[TYPE_BYTE] == byte(ROOT_REQUEST_TYPE) || buf[TYPE_BYTE] == byte(ROOT_TYPE) {
@@ -147,7 +150,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 							if err != nil {
 								panic(err)
 							}
-							ok := VerifySignature(buf, ConvertBytesToEcdsaPublicKey(  keyFromPeerBytes ) )
+							ok := VerifySignature(buf, ConvertBytesToEcdsaPublicKey(keyFromPeerBytes))
 							if !ok {
 								panic(ok)
 							}
@@ -182,6 +185,17 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 						sessionWeOpened := SessionWeOpened{FullAddress: udpAddress, LastDatagramTime: time.Now(), Merkle: nil, Buffer: nil}
 						sessionsWeOpened = append(sessionsWeOpened, sessionWeOpened)
 					}
+
+					if (buf[FLAGS_FIRST_BYTE+3] >> 3 & 1) == 1 {
+						privateKeyForSession := CreatePrivateKeyForEncryption()
+						myPublicKeyEncoded := GeneratePublicEncodedKeyForEncryption(privateKeyForSession)
+
+						sessionsWeOpened[i].privateKeyForSession = CreatePrivateKeyForEncryption()
+						myPublicKeyBytes, _ := base64.RawStdEncoding.DecodeString(myPublicKeyEncoded)
+						sessionsWeOpened[i].myPublicKey = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
+
+						UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), SEND_KEY_TYPE, udpAddress, []byte(myPublicKeyEncoded), privateKey)
+					}
 				}
 
 			} else { // We are waiting for a datagram from this address but not a datagram with the received datagram type
@@ -215,15 +229,9 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
-			/*if (buf[FLAGS_LENGTH]>>2) && 1{ //encryption extension
-
-			}*/
-
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLY_TYPE, udpAddress, nil, privateKey)
 			openSession := &OpenSession{FullAddress: udpAddress, LastHandshakeTime: time.Now()}
 			openSessions = append(openSessions, *openSession)
-			
-			
 
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil, privateKey)
@@ -304,6 +312,8 @@ func UdpWrite(conn net.PacketConn, datagramId string, datagramType int, address 
 		datagram = DatumDatagram(datagramId, data)
 	case ERROR_TYPE:
 		datagram = ErrorDatagram(datagramId, data)
+	case SEND_KEY_TYPE:
+		datagram = SendKeyDatagram(datagramId, data, privateKey)
 	default:
 		return false
 	}
