@@ -188,9 +188,13 @@ func CreatePrivateKeyForEncryption() *ecdsa.PrivateKey{
 	return privateKey
 }
 
-func GeneratePublicKeyForEncryption(privateKey *ecdsa.PrivateKey) ecdsa.PublicKey{
+func GeneratePublicEncodedKeyForEncryption(privateKey *ecdsa.PrivateKey) string {
 	publicKey := privateKey.PublicKey
-	return publicKey
+	publicKey64Bytes := make([]byte, 64)
+	publicKey.X.FillBytes(publicKey64Bytes[:32])
+	publicKey.Y.FillBytes(publicKey64Bytes[32:])
+	publicKeyEncoded := base64.RawStdEncoding.EncodeToString(publicKey64Bytes)
+	return publicKeyEncoded
 }
 
 func GenerateSharedKey(publicKeyForEncryptionFromPeer ecdsa.PublicKey, myPrivateKeyForEncryption *ecdsa.PrivateKey) []byte {
