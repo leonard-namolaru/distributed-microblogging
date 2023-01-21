@@ -179,3 +179,24 @@ func CreateSignature(datagram []byte, datagramLength int, privateKey *ecdsa.Priv
 
 	return datagram
 }
+
+func CreatePrivateKeyForEncryption() *ecdsa.PrivateKey{
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	return privateKey
+}
+
+func GeneratePublicKeyForEncryption(privateKey *ecdsa.PrivateKey) ecdsa.PublicKey{
+	publicKey := privateKey.PublicKey
+	return publicKey
+}
+
+func GenerateSharedKey(publicKeyForEncryptionFromPeer ecdsa.PublicKey, myPrivateKeyForEncryption *ecdsa.PrivateKey) []byte {
+	sharedKey, err := publicKeyForEncryptionFromPeer.Curve.ScalarMult(publicKeyForEncryptionFromPeer.X, publicKeyForEncryptionFromPeer.Y, myPrivateKeyForEncryption.D.Bytes())
+	if err != nil {
+		panic(err)
+	}
+	return sharedKey.Bytes()
+}
