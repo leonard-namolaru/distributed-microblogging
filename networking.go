@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"encoding/base64"
 	"time"
 )
 
@@ -142,7 +143,11 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 				for _, addr := range peer.Addresses {
 					if int(addr.Port) == udpAddress.Port && net.ParseIP(addr.Ip).Equal(udpAddress.IP) && !addressFind {
 						if buf[TYPE_BYTE] == 0 || buf[TYPE_BYTE] == 128 || buf[TYPE_BYTE] == byte(ROOT_REQUEST_TYPE) || buf[TYPE_BYTE] == byte(ROOT_TYPE) {
-							ok := VerifySignature(buf, ConvertBytesToEcdsaPublicKey( []byte(peer.Key) ) )
+							keyFromPeerBytes, err := base64.RawStdEncoding.DecodeString(peer.Key)
+							if err != nil {
+								panic(err)
+							}
+							ok := VerifySignature(buf, ConvertBytesToEcdsaPublicKey(  keyFromPeerBytes ) )
 							if !ok {
 								panic(ok)
 							}
@@ -210,9 +215,15 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 
 		switch buf[TYPE_BYTE] {
 		case byte(HELLO_TYPE): // If a Hello datagram arrives, we send HelloReplay and open a session for an hour
+			/*if (buf[FLAGS_LENGTH]>>2) && 1{ //encryption extension
+
+			}*/
+
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), HELLO_REPLY_TYPE, udpAddress, nil, privateKey)
 			openSession := &OpenSession{FullAddress: udpAddress, LastHandshakeTime: time.Now()}
 			openSessions = append(openSessions, *openSession)
+			
+			
 
 		case byte(ROOT_REQUEST_TYPE):
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), ROOT_TYPE, udpAddress, nil, privateKey)

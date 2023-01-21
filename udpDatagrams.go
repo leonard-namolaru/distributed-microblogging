@@ -71,7 +71,7 @@ func HelloOrHelloReplyDatagram(isHelloDatagram bool, id string, userName string,
 	}
 	datagram := datagramGeneralStructure([]byte(id), datagramType, datagramBodyLength, datagramLength)
 
-	copy(datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], []byte{0, 0, 0, 0})
+	copy(datagram[FLAGS_FIRST_BYTE:FLAGS_FIRST_BYTE+FLAGS_LENGTH], []byte{0, 0, 0, 8})
 	datagram[USER_NAME_LENGTH_BYTE] = byte(usernameLength)
 	copy(datagram[USER_NAME_FIRST_BYTE:USER_NAME_FIRST_BYTE+usernameLength], userName)
 

@@ -31,10 +31,10 @@ type Address struct {
 
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
-const NAME_FOR_SERVER_REGISTRATION = "HugoLeonard"
+const NAME_FOR_SERVER_REGISTRATION = "HugoLeonardTest3"
 const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION + "_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
-const UDP_LISTENING_ADDRESS = ":8081"
+const UDP_LISTENING_ADDRESS = ":8083"
 
 var datagramId = "idid"
 
@@ -123,6 +123,7 @@ func main() {
 		}
 
 		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, myPrivateKey)
+		break;
 	}
 
 	fmt.Println()
