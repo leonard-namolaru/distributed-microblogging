@@ -175,7 +175,16 @@ func CreateSignature(datagram []byte, datagramLength int, privateKey *ecdsa.Priv
 	r.FillBytes(signature[:32])
 	s.FillBytes(signature[32:])
 
-	copy(datagram[datagramLength-SIGNATURE_LENGTH:], signature)
+	copy(datagram[datagramLength-SIGNATURE_LENGTH:], signature ) //signature
+
+	myPublicKeyBytes, err := base64.RawStdEncoding.DecodeString(MyPublicKeyEncoded)
+	if err != nil {
+		panic(err)
+	}
+	ok := VerifySignature(datagram, ConvertBytesToEcdsaPublicKey(myPublicKeyBytes) )
+	if !ok {
+		panic(err)
+	}
 
 	return datagram
 }
