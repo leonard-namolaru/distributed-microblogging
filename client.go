@@ -31,15 +31,16 @@ type Address struct {
 
 const DEBUG_MODE = true
 const HOST = "jch.irif.fr:8443"
-const NAME_FOR_SERVER_REGISTRATION = "HugoLeonardTest3"
+const NAME_FOR_SERVER_REGISTRATION = "HugoTEST9"
 const NAME_FILE_PRIVATE_KEY = NAME_FOR_SERVER_REGISTRATION + "_key.priv"
 const MERKLE_TREE_MAX_ARITY = 32
-const UDP_LISTENING_ADDRESS = ":8083"
+const UDP_LISTENING_ADDRESS = ":8089"
 
 var datagramId = "idid"
 
 var peers []Peer
 var ThisPeerMerkleTree = CreateTree(CreateMessagesForMerkleTree(33), MERKLE_TREE_MAX_ARITY)
+var MyPublicKeyEncoded string
 
 func main() {
 	httpClient := CreateHttpClient()
@@ -48,7 +49,7 @@ func main() {
 	 */
 	fileInfo, err := os.Stat(NAME_FILE_PRIVATE_KEY)
 	myPrivateKey := CreateOrFindPrivateKey(fileInfo, err)
-	myPublicKeyEncoded := CreatePublicKeyEncoded(myPrivateKey)
+	MyPublicKeyEncoded = CreatePublicKeyEncoded(myPrivateKey)
 
 	/* GET THE UDP ADDRESS OF THE SERVER
 	 *  HTTP GET to /udp-address followed by a JSON decode.
@@ -72,7 +73,7 @@ func main() {
 	/* SERVER REGISTRATION
 	 *  A POST REQUEST TO /register
 	 */
-	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: myPublicKeyEncoded}
+	serverRegistration := ServerRegistration{Name: NAME_FOR_SERVER_REGISTRATION, Key: MyPublicKeyEncoded}
 	jsonEncoding, err := json.Marshal(serverRegistration)
 	if err != nil {
 		log.Fatalf("The method json.Marshal() failed at the stage of encoding the JSON object for server registration :  %v \n", err)
@@ -122,7 +123,9 @@ func main() {
 			log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 		}
 
+		fmt.Println("ON VA ENVOYER HELLO--------------------------------------")
 		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, myPrivateKey)
+		fmt.Println("ON A ENVOYER HELLO----------------------------------------")
 		break;
 	}
 
