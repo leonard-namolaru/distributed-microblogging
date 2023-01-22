@@ -29,13 +29,13 @@ type OpenSession struct {
 }
 
 type SessionWeOpened struct {
-	FullAddress          *net.UDPAddr
-	LastDatagramTime     time.Time
-	Merkle               *MerkleTree
-	Buffer               []byte
-	sharedKey            []byte
-	privateKeyForSession *ecdsa.PrivateKey
-	myPublicKey          *ecdsa.PublicKey
+	FullAddress          	*net.UDPAddr
+	LastDatagramTime     	time.Time
+	Merkle               	*MerkleTree
+	Buffer               	[]byte
+	sharedKey            	[]byte
+	privateKeyForSession 	*ecdsa.PrivateKey
+	myPublicKeyForSession   *ecdsa.PublicKey
 }
 
 var waitingResponses []WaitingResponse
@@ -192,7 +192,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 
 						sessionsWeOpened[i].privateKeyForSession = CreatePrivateKeyForEncryption()
 						myPublicKeyBytes, _ := base64.RawStdEncoding.DecodeString(myPublicKeyEncoded)
-						sessionsWeOpened[i].myPublicKey = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
+						sessionsWeOpened[i].myPublicKeyForSession = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
 
 						UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), SEND_KEY_HELLO_TYPE, udpAddress, []byte(myPublicKeyEncoded), privateKey)
 					}
@@ -242,7 +242,7 @@ func UdpRead(conn net.PacketConn, privateKey *ecdsa.PrivateKey, addressesFromSer
 
 			sessionsWeOpened[i].privateKeyForSession = CreatePrivateKeyForEncryption()
 			myPublicKeyBytes, _ := base64.RawStdEncoding.DecodeString(myPublicKeyEncoded)
-			sessionsWeOpened[i].myPublicKey = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
+			sessionsWeOpened[i].myPublicKeyForSession = ConvertBytesToEcdsaPublicKey(myPublicKeyBytes)
 
 			UdpWrite(conn, string(buf[ID_FIRST_BYTE:ID_FIRST_BYTE+ID_LENGTH]), SEND_KEY_HELLO_REPLY_TYPE, udpAddress, []byte(myPublicKeyEncoded), privateKey)
 
