@@ -123,10 +123,8 @@ func main() {
 			log.Fatalf("The method net.ResolveUDPAddr() failed with %s address : %v\n", full_address, errorMessage)
 		}
 
-		fmt.Println("ON VA ENVOYER HELLO--------------------------------------")
 		UdpWrite(conn, datagramId, HELLO_TYPE, serverAddr, nil, myPrivateKey)
-		fmt.Println("ON A ENVOYER HELLO----------------------------------------")
-		break
+		//break
 	}
 
 	fmt.Println()

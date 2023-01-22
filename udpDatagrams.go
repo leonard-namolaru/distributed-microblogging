@@ -104,6 +104,8 @@ func RootDatagram(id string, privateKey *ecdsa.PrivateKey) []byte {
 	return datagramWithSignature
 }
 
+/********************************************** SEND KEY **********************************************/
+
 func SendKeyDatagram(id string, publicKey []byte, privateKey *ecdsa.PrivateKey, isReply bool) []byte {
 	datagramLength := DATAGRAM_MIN_LENGTH + len(publicKey) + SIGNATURE_LENGTH
 	datgramType := SEND_KEY_HELLO_TYPE
