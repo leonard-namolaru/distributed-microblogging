@@ -1,5 +1,5 @@
 ### Implémentation d’un protocole : Service de micro-blogging distribué
-
+![distributed-microblogging-img.png](distributed-microblogging-img.png)
 > :school: **Lieu de formation :** Université Paris Cité, Campus Grands Moulins (ex-Paris Diderot)
 > 
 > :books: **UE :** Protocoles des Services Internet
@@ -31,3 +31,6 @@ Le but de ce projet est d’implémenter un service de micro-blogging (comme par
   
 - **Nous implémentons l’authentification entre le client et le serveur ainsi qu’entre les pairs.** Nous partageons une clé publique et nous stockons une clé privée. Nous vérifions l’identité du pair ou du serveur à travers les signatures. De même les pairs et le serveur peuvent vérifier notre identité car nous signons nos messages en début de session.
 
+#### Ressources supplémentaires
+- [Rapport]()
+- [Un exemple de session]()
