@@ -1,6 +1,3 @@
-Exemple d'utilisation :
-***********************************************************
-
 PS C:\Users\lenny\OneDrive\Documents\Master 2\protocoles-services-internet> go run client.go merkleTree.go networking.go udpDatagrams.go security.go
 privateKeyString : MHcCAQEEINbUBnw1OqCeE98xWL3/BPtj3sdX/DHpOi4lhbSQ7ZXnoAoGCCqGSM49AwEHoUQDQgAEfPVX8r8UFb0lZT6/VdusJt58106MpuokY1mkWb9RBbsKmfUXSnkF69kD6lWigLelNvgLm8aMbKbN0t8rINYKGQ==
 Our public key : hYwOgNVaES2ti5PMsIDTEtunqUReHtYfGC+BRZ6DwZC295gBGgEREQMd7rVkCiEVXw8rJbg7f51mY6lKasqQ+g
