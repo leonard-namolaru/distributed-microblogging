@@ -1,5 +1,7 @@
 ![readme-header.png](readme-header.png)
-### Implémentation d’un protocole : Service de micro-blogging distribué
+[Français](#français-implémentation-dun-protocole-service-de-micro-blogging-distribué) • [English](#english-protocol-implementation-distributed-micro-blogging-service)  • [עברית](#עברית-מימוש-של-פרוטוקול--שירות-מיקרו-בלוגינג-מבוזר)
+
+### [Français] Implémentation d’un protocole: Service de micro-blogging distribué
 > :school: **Lieu de formation :** Université Paris Cité, Campus Grands Moulins (ex-Paris Diderot)
 > 
 > :books: **UE :** Protocoles des Services Internet
@@ -34,3 +36,7 @@ Le but de ce projet est d’implémenter un service de micro-blogging (comme par
 #### Ressources supplémentaires
 - [Rapport](Rapport_FR.pdf)
 - [Un exemple de session](Session_example.txt)
+
+### [English] Protocol Implementation: Distributed Micro-blogging Service
+
+### [עברית] מימוש של פרוטוקול : שירות מיקרו-בלוגינג מבוזר
