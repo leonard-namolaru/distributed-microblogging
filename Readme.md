@@ -34,7 +34,7 @@ Le but de ce projet est d’implémenter un service de micro-blogging (comme par
 - **Nous implémentons l’authentification entre le client et le serveur ainsi qu’entre les pairs.** Nous partageons une clé publique et nous stockons une clé privée. Nous vérifions l’identité du pair ou du serveur à travers les signatures. De même les pairs et le serveur peuvent vérifier notre identité car nous signons nos messages en début de session.
 
 #### Ressources supplémentaires
-- [Rapport](Rapport_FR.pdf)
+- [Rapport](https://leonard-namolaru.com/wp-content/uploads/2026/11/distributed-microblogging-FR.pdf)
 - [Un exemple de session](Session_example.txt)
 
 ### [English] Protocol Implementation: Distributed Micro-blogging Service
